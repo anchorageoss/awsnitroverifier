@@ -45,6 +45,10 @@ lint: ## Run linter with anchorlabsinc dependency checks
 		echo "  ✅ Dependency check completed (primary security check passed)"; \
 	fi
 
+go-mod-tidy: ## Run `go mod tidy`
+	@echo "🧹 Running go mod tidy..."
+	@go mod tidy
+
 fmt: ## Format Go code
 	@echo "🎨 Formatting code..."
 	@go fmt ./...
