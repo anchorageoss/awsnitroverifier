@@ -1,0 +1,26 @@
+# This would normally contain a base64-encoded AWS Nitro attestation document
+# For testing purposes, you should replace this with a real attestation document
+# obtained from your AWS Nitro Enclave environment
+
+# Example structure (this is not a real attestation):
+# - ModuleID: AWS Nitro Enclave module identifier
+# - PCRs: Platform Configuration Registers with measured boot values
+# - Certificate: X.509 certificate for signature verification
+# - CABundle: Certificate chain to AWS Nitro root
+# - Optional: UserData, PublicKey, Nonce for application-specific data
+
+# To generate a real attestation document:
+# 1. Create and run a Nitro Enclave
+# 2. From within the enclave, call the attestation API
+# 3. The document will be signed by AWS and contain your specific PCR values
+
+# Example PCR values you might see in AWS Nitro attestations:
+# PCR[0]: Platform firmware measurement
+# PCR[1]: Linux kernel measurement  
+# PCR[2]: User application measurement
+# PCR[3]: Additional application measurement (if applicable)
+# PCR[4]: Boot loader measurement
+# PCR[8]: Certificate of the Attestation Public Key
+
+# For actual testing, replace this file with a real base64-encoded attestation
+PLACEHOLDER_FOR_REAL_AWS_ATTESTATION_DOCUMENT

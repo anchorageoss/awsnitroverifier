@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check:
+    name: Check Dependencies and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.25
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Check for prohibited dependencies
+        run: |
+          echo "🔍 Checking for prohibited dependencies..."
+          if find . -name "*.go" -exec grep -l "anchorlabsinc" {} \; 2>/dev/null | head -1; then
+            echo "❌ ERROR: Found anchorlabsinc imports!"
+            exit 1
+          fi
+          if grep -q "anchorlabsinc" go.mod go.sum 2>/dev/null; then
+            echo "❌ ERROR: Found anchorlabsinc in go.mod/go.sum!"
+            exit 1
+          fi
+          echo "✅ No prohibited dependencies found"
+
+      - name: Download dependencies
+        run: go mod download && go mod verify
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout 3m
+
+      - name: Build
+        run: go build -v ./...
