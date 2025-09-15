@@ -1,0 +1,4 @@
+*.base64
+turnkey-polling-logs/
+# copilot seems to really like to compile the binary, adding here to avoid checking it in
+confidentialcomputeverifier

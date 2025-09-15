@@ -38,9 +38,7 @@ coverage.html
 coverage.out
 
 # Build artifacts
-awsnitroverifier
-awsnitroverifier-*
-
+bin/
 # Temporary files
 *.tmp
 *.temp

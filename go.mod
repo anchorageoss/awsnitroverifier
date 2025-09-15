@@ -1,4 +1,4 @@
-module github.com/awsnitroverifier/awsnitroverifier
+module github.com/anchorageoss/awsnitroverifier
 
 go 1.25.0
 

@@ -12,7 +12,10 @@ help: ## Display this help message
 ##@ Building and Testing
 build: ## Build the project
 	@echo "🔨 Building project..."
-	@go build -v ./...
+	@mkdir -p bin
+	@go build -o bin/awsnitroverifier ./cmd/awsnitroverifier
+	@echo "✅ Binary built: bin/awsnitroverifier"
+
 
 test: ## Run all tests
 	@echo "🧪 Running tests..."
@@ -79,6 +82,7 @@ security-scan: ## Run security scan (gosec)
 clean: ## Clean build artifacts and temporary files
 	@echo "🧹 Cleaning..."
 	@go clean ./...
+	@rm -rf bin/
 	@rm -f coverage.out coverage.html
 	@go mod tidy
 

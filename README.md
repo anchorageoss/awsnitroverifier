@@ -15,7 +15,7 @@ A comprehensive Go library for validating AWS Nitro Enclave attestation document
 ## Installation
 
 ```go
-import "github.com/awsnitroverifier/awsnitroverifier"
+import "github.com/anchorageoss/awsnitroverifier"
 ```
 
 ## Quick Start
