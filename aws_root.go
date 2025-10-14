@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"errors"
 	"fmt"
+	"time"
 )
 
 // Use this command to get this value
@@ -26,18 +26,20 @@ rfMCMQCi85sWBbJwKKXdS6BptQFuZbT73o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6N
 IwLz3/Y=
 -----END CERTIFICATE-----`
 
+// AWSNitroRootFingerprint is the expected SHA-256 fingerprint of the AWS Nitro root certificate
 // From https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html
 // Expected AWS Nitro root certificate fingerprint (SHA-256)
 const AWSNitroRootFingerprint = "641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b"
 
-// AWSNitroRootCertificate returns the parsed AWS Nitro root certificate
-func AWSNitroRootCertificate() (*x509.Certificate, error) {
+// EmbeddedAWSNitroRootCertificate returns the parsed AWS Nitro root certificate from embedded PEM data.
+// This function panics if the embedded certificate cannot be parsed, as this indicates a build-time error.
+func EmbeddedAWSNitroRootCertificate() *x509.Certificate {
 	pemBlock := []byte(awsNitroRootPEM)
 	cert, err := DecodePEMCertificate(pemBlock)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse AWS Nitro root certificate: %w", err)
+		panic(fmt.Errorf("failed to parse embedded AWS Nitro root certificate: %w", err))
 	}
-	return cert, nil
+	return cert
 }
 
 // VerifyAWSNitroRootCertificate verifies that a certificate matches the AWS Nitro root
@@ -66,10 +68,45 @@ func VerifyAWSNitroRootCertificate(cert *x509.Certificate) error {
 	return nil
 }
 
-// VerifyCertificateChain verifies the certificate chain against AWS Nitro root
-func VerifyCertificateChain(targetCert *x509.Certificate, caBundle [][]byte, skipTimestamp bool) error {
+// VerifyCertificateChain verifies the certificate chain against AWS Nitro root CA.
+//
+// This function validates that:
+// 1. The first certificate in caBundle is the AWS Nitro root CA
+// 2. The targetCert can be verified through the chain of intermediates back to the root
+// 3. All certificates in the chain have valid signatures
+// 4. Certificate timestamps are valid (unless opts.SkipTimestampCheck is true)
+// 5. Certificate CNs match expected values (if opts.ExpectedCertificateCNs is provided)
+//
+// Parameters:
+//   - targetCert: The leaf certificate to verify (must be pre-parsed using x509.ParseCertificate)
+//   - caBundle: Array of DER-encoded certificates [root, intermediate1, intermediate2, ...]
+//   - opts: Optional validation options (nil uses defaults: no timestamp skip, no CN validation)
+//
+// Example usage:
+//
+//	// Basic verification (no options)
+//	err := VerifyCertificateChain(cert, caBundle, nil)
+//
+//	// Skip timestamp validation
+//	err := VerifyCertificateChain(cert, caBundle, &AWSNitroVerifierOptions{
+//	    SkipTimestampCheck: true,
+//	})
+//
+//	// With CN validation
+//	err := VerifyCertificateChain(cert, caBundle, &AWSNitroVerifierOptions{
+//	    ExpectedCertificateCNs: []string{
+//	        "i-021e5d515ed8a0f16-enc0196696aaef2d328.us-east-1.aws",  // leaf
+//	        "",  // skip root (validated separately)
+//	        "i-021e5d515ed8a0f16.us-east-1.aws.nitro-enclaves",       // first intermediate
+//	    },
+//	})
+func VerifyCertificateChain(targetCert *x509.Certificate, caBundle [][]byte, opts *AWSNitroVerifierOptions) error {
+	if targetCert == nil {
+		return fmt.Errorf("target certificate is nil")
+	}
+
 	if len(caBundle) == 0 {
-		return errors.New("CA bundle is empty")
+		return fmt.Errorf("CA bundle is empty")
 	}
 
 	// Parse CA bundle
@@ -96,24 +133,50 @@ func VerifyCertificateChain(targetCert *x509.Certificate, caBundle [][]byte, ski
 	}
 
 	// Verify the chain
-	opts := x509.VerifyOptions{
+	verifyOpts := x509.VerifyOptions{
 		Roots:         roots,
 		Intermediates: intermediates,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
 
 	// Skip time validation if requested (for expired certificates)
-	if skipTimestamp {
-		opts.CurrentTime = targetCert.NotBefore.Add(1) // Set time to just after cert became valid
+	if opts != nil && opts.SkipTimestampCheck {
+		verifyOpts.CurrentTime = targetCert.NotBefore.Add(time.Second) // Set time to 1 second after cert became valid
 	}
 
-	chains, err := targetCert.Verify(opts)
+	chains, err := targetCert.Verify(verifyOpts)
 	if err != nil {
 		return fmt.Errorf("certificate chain verification failed: %w", err)
 	}
 
 	if len(chains) == 0 {
-		return errors.New("no valid certificate chains found")
+		return fmt.Errorf("no valid certificate chains found")
+	}
+
+	// Validate Common Names if requested
+	if opts != nil && opts.ExpectedCertificateCNs != nil && len(opts.ExpectedCertificateCNs) > 0 {
+		// Build the full chain: [leaf, root, intermediate1, intermediate2, ...]
+		fullChain := make([]*x509.Certificate, 0, 1+len(caCerts))
+		fullChain = append(fullChain, targetCert)
+		fullChain = append(fullChain, caCerts...)
+
+		// Validate each position where an expected CN is provided
+		for i, expectedCN := range opts.ExpectedCertificateCNs {
+			// Skip if no CN is expected at this position
+			if expectedCN == "" {
+				continue
+			}
+
+			// Check if we have a certificate at this position
+			if i >= len(fullChain) {
+				return fmt.Errorf("ExpectedCertificateCNs[%d] provided but chain only has %d certificates", i, len(fullChain))
+			}
+
+			actualCN := fullChain[i].Subject.CommonName
+			if actualCN != expectedCN {
+				return fmt.Errorf("certificate CN mismatch at position %d: expected %q, got %q", i, expectedCN, actualCN)
+			}
+		}
 	}
 
 	return nil
@@ -145,16 +208,4 @@ func ExtractCertificateChainInfo(caBundle [][]byte) ([]CertificateInfo, error) {
 func CalculateCertificateFingerprint(cert *x509.Certificate) string {
 	fingerprint := sha256.Sum256(cert.Raw)
 	return hex.EncodeToString(fingerprint[:])
-}
-
-// VerifyChainOfTrust performs complete chain of trust verification
-func VerifyChainOfTrust(targetCert []byte, caBundle [][]byte, skipTimestamp bool) error {
-	// Parse target certificate
-	cert, err := x509.ParseCertificate(targetCert)
-	if err != nil {
-		return fmt.Errorf("failed to parse target certificate: %w", err)
-	}
-
-	// Verify the chain
-	return VerifyCertificateChain(cert, caBundle, skipTimestamp)
 }

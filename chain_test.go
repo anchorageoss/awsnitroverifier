@@ -12,9 +12,8 @@ func TestChainOfTrustValidation(t *testing.T) {
 	attestationData := getTurnkeyProductionAttestation()
 
 	// Test with chain validation enabled but timestamp check disabled
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:  true,
-		SkipChainValidation: false,
 	})
 
 	result, err := validator.Validate(attestationData)
@@ -63,10 +62,8 @@ func TestChainOfTrustValidation(t *testing.T) {
 func TestUserDataExtraction(t *testing.T) {
 	attestationData := getTurnkeyProductionAttestation()
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:        true,
-		SkipSignatureVerification: true,
-		SkipChainValidation:       true,
 	})
 
 	result, err := validator.Validate(attestationData)
@@ -130,10 +127,8 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 		t.Run(fixture.name, func(t *testing.T) {
 			attestationData := fixture.attestationData
 
-			validator := NewVerifier(ValidatorOptions{
+			validator := NewVerifier(AWSNitroVerifierOptions{
 				SkipTimestampCheck:        true,
-				SkipSignatureVerification: true,
-				SkipChainValidation:       true,
 			})
 
 			result, err := validator.Validate(attestationData)
@@ -175,10 +170,7 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 // TestAWSRootCertificateVerification tests the AWS root certificate verification
 func TestAWSRootCertificateVerification(t *testing.T) {
 	// Load the AWS Nitro root certificate
-	rootCert, err := AWSNitroRootCertificate()
-	if err != nil {
-		t.Fatalf("Failed to load AWS root certificate: %v", err)
-	}
+	rootCert := EmbeddedAWSNitroRootCertificate()
 
 	// Verify it's the correct certificate
 	if err := VerifyAWSNitroRootCertificate(rootCert); err != nil {

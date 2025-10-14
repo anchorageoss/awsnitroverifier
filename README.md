@@ -23,7 +23,7 @@ import "github.com/anchorageoss/awsnitroverifier"
 ### Basic Validation with Chain of Trust
 
 ```go
-verifier := nitroverifier.NewVerifier(nitroverifier.ValidatorOptions{
+verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
     SkipTimestampCheck: true, // For expired test certificates
 })
 
@@ -50,7 +50,7 @@ if result.Valid && result.ChainValidated {
 expectedPCR3 := "your_expected_pcr3_value_here"
 pcr3Bytes, _ := hex.DecodeString(expectedPCR3)
 
-verifier := nitroverifier.NewVerifier(nitroverifier.ValidatorOptions{
+verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
     SkipTimestampCheck: true,
     PCRRules: []nitroverifier.PCRRule{
         {Index: 3, Value: pcr3Bytes},
@@ -75,21 +75,19 @@ attestation := getTurnkeyProductionAttestation() // Real Turnkey attestation
 ## Validation Options
 
 ```go
-type ValidatorOptions struct {
+type AWSNitroVerifierOptions struct {
     // Skip certificate timestamp validation
     SkipTimestampCheck bool
 
-    // Override validation time
-    CurrentTime *time.Time
+    // Override validation time (zero value uses time.Now())
+    CurrentTime time.Time
 
     // Expected PCR values
     PCRRules []PCRRule
 
-    // Skip signature verification
-    SkipSignatureVerification bool
-
-    // Skip certificate chain validation against AWS root
-    SkipChainValidation bool
+    // Expected certificate Common Names for chain validation
+    // Use empty strings to skip validation at specific positions
+    ExpectedCertificateCNs []string
 }
 ```
 
@@ -200,7 +198,7 @@ func validateAttestation(attestationBase64 string, expectedPCRs map[uint]string)
         })
     }
 
-    verifier := nitroverifier.NewVerifier(nitroverifier.ValidatorOptions{
+    verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
         SkipTimestampCheck: true, // Adjust based on your needs
         PCRRules:          pcrRules,
     })
