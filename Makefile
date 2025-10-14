@@ -59,20 +59,7 @@ vet: ## Run go vet
 	@go vet ./...
 
 check-deps: ## Check for prohibited anchorlabsinc dependencies
-	@echo "🔍 Checking for prohibited dependencies..."
-	@if grep -r "anchorlabsinc" --include="*.go" --include="*.mod" .; then \
-		echo "❌ Found prohibited anchorlabsinc dependencies!"; \
-		echo "   Please remove these before committing."; \
-		exit 1; \
-	else \
-		echo "✅ No prohibited dependencies found."; \
-	fi
-	@if grep -r "github.com/anchorlabsinc" go.mod go.sum 2>/dev/null; then \
-		echo "❌ Found anchorlabsinc references in go.mod/go.sum!"; \
-		exit 1; \
-	else \
-		echo "✅ go.mod and go.sum are clean."; \
-	fi
+	@./test_ci_check.sh
 
 security-scan: ## Run security scan (gosec)
 	@echo "🔒 Running security scan..."
