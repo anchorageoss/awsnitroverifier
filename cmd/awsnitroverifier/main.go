@@ -44,10 +44,6 @@ func main() {
 						Value: true, // Default to true for test fixtures
 					},
 					&cli.BoolFlag{
-						Name:  "skip-signature",
-						Usage: "Skip signature verification",
-					},
-					&cli.BoolFlag{
 						Name:    "verbose",
 						Aliases: []string{"v"},
 						Usage:   "Verbose output with detailed validation results",
@@ -99,10 +95,6 @@ func main() {
 					&cli.BoolFlag{
 						Name:  "skip-timestamp",
 						Usage: "Skip certificate timestamp validation",
-					},
-					&cli.BoolFlag{
-						Name:  "skip-signature",
-						Usage: "Skip signature verification",
 					},
 					&cli.BoolFlag{
 						Name:    "verbose",
