@@ -17,7 +17,7 @@ var turnkeyProductionAttestation string
 var turnkeyPreProductionAttestation string
 
 //go:embed testdata/aws-nitro-example.base64
-var awsNitroExampleAttestation string
+var awsNitroExampleAttestation string //nolint:unused // Reserved for future AWS Nitro example fixtures
 
 // turnkeyFixtures provides access to embedded Turnkey attestation test data (test-only)
 var turnkeyFixtures = struct {
@@ -29,7 +29,7 @@ var turnkeyFixtures = struct {
 }
 
 // awsFixtures provides access to generic AWS Nitro attestation examples (test-only)
-var awsFixtures = struct {
+var awsFixtures = struct { //nolint:unused // Reserved for future AWS Nitro example fixtures
 	Example string
 }{
 	Example: strings.TrimSpace(awsNitroExampleAttestation),
@@ -46,7 +46,7 @@ func getTurnkeyPreProductionAttestation() string {
 }
 
 // getAWSExampleAttestation returns a generic AWS Nitro attestation example for testing
-func getAWSExampleAttestation() string {
+func getAWSExampleAttestation() string { //nolint:unused // Reserved for future AWS Nitro example fixtures
 	return awsFixtures.Example
 }
 
