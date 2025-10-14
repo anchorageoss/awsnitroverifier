@@ -22,7 +22,7 @@ jobs:
       - name: Check for prohibited dependencies
         run: |
           echo "🔍 Checking for prohibited dependencies..."
-          if find . -name "*.go" -exec grep -l "anchorlabsinc" {} \; 2>/dev/null | head -1; then
+          if find . -name "*.go" -not -path "./.git/*" -exec grep -l "anchorlabsinc" {} \; 2>/dev/null | head -1; then
             echo "❌ ERROR: Found anchorlabsinc imports!"
             exit 1
           fi
