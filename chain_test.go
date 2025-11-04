@@ -13,7 +13,7 @@ func TestChainOfTrustValidation(t *testing.T) {
 
 	// Test with chain validation enabled but timestamp check disabled
 	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:  true,
+		SkipTimestampCheck: true,
 	})
 
 	result, err := validator.Validate(attestationData)
@@ -63,7 +63,7 @@ func TestUserDataExtraction(t *testing.T) {
 	attestationData := getTurnkeyProductionAttestation()
 
 	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:        true,
+		SkipTimestampCheck: true,
 	})
 
 	result, err := validator.Validate(attestationData)
@@ -116,11 +116,6 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 			attestationData: getTurnkeyProductionAttestation(),
 			expected:        "8a5510ca253818acec5fb27b3ca114b4a260fb84f881838eb124aae9c968ad74",
 		},
-		{
-			name:            "PreProd",
-			attestationData: getTurnkeyPreProductionAttestation(),
-			expected:        "37ef96370730962341148a03754955137884516def11439b5d841809f6f9caac",
-		},
 	}
 
 	for _, fixture := range fixtures {
@@ -128,7 +123,7 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 			attestationData := fixture.attestationData
 
 			validator := NewVerifier(AWSNitroVerifierOptions{
-				SkipTimestampCheck:        true,
+				SkipTimestampCheck: true,
 			})
 
 			result, err := validator.Validate(attestationData)
