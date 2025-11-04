@@ -49,3 +49,6 @@ bin/
 # Local environment files
 .env
 .env.local
+
+# Claude likes to write binary at top level
+^awsnitroverifier

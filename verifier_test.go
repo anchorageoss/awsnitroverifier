@@ -109,9 +109,8 @@ func TestPCRValidation(t *testing.T) {
 		t.Skip("No test attestation document available")
 	}
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:        true,
-		SkipSignatureVerification: false,
 	})
 
 	result, err := validator.Validate(attestationBase64)
@@ -153,9 +152,8 @@ func TestMandatoryFields(t *testing.T) {
 		t.Skip("No test attestation document available")
 	}
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:        true,
-		SkipSignatureVerification: true,
 	})
 
 	result, err := validator.Validate(attestationBase64)
@@ -225,9 +223,8 @@ func TestOptionalFieldConstraints(t *testing.T) {
 		t.Skip("No test attestation document available")
 	}
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:        true,
-		SkipSignatureVerification: true,
 	})
 
 	result, err := validator.Validate(attestationBase64)
@@ -295,9 +292,8 @@ func TestCertificateChainValidation(t *testing.T) {
 		t.Skip("No test attestation document available")
 	}
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck:        true,
-		SkipSignatureVerification: true,
 	})
 
 	result, err := validator.Validate(attestationBase64)
@@ -368,7 +364,7 @@ func BenchmarkSignatureVerification(b *testing.B) {
 		b.Skip("No test attestation document available")
 	}
 
-	validator := NewVerifier(ValidatorOptions{
+	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck: true,
 	})
 

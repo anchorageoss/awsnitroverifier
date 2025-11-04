@@ -1,9 +1,7 @@
 package nitroverifier
 
 import (
-	"crypto"
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
@@ -18,11 +16,11 @@ import (
 
 // Verifier provides methods to validate AWS Nitro attestations
 type Verifier struct {
-	options ValidatorOptions
+	options AWSNitroVerifierOptions
 }
 
 // NewVerifier creates a new attestation validator with the given options
-func NewVerifier(options ValidatorOptions) *Verifier {
+func NewVerifier(options AWSNitroVerifierOptions) *Verifier {
 	return &Verifier{
 		options: options,
 	}
@@ -80,7 +78,7 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 
 	// Parse certificate information
 	if len(doc.Certificate) > 0 {
-		certInfo, err := ParseCertificate(doc.Certificate)
+		certInfo, err := ExtractCertificateInfo(doc.Certificate)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("failed to parse certificate: %w", err))
 		} else {
@@ -89,8 +87,8 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 			// Validate certificate timestamp if not skipped
 			if !v.options.SkipTimestampCheck {
 				checkTime := time.Now()
-				if v.options.CurrentTime != nil {
-					checkTime = *v.options.CurrentTime
+				if !v.options.CurrentTime.IsZero() {
+					checkTime = v.options.CurrentTime
 				}
 
 				if err := ValidateCertificateTimestamp(certInfo, checkTime); err != nil {
@@ -99,33 +97,39 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 			}
 		}
 
-		// Validate certificate chain against AWS root if not skipped
-		if !v.options.SkipChainValidation && doc.CABundle != nil {
+		// Validate certificate chain against AWS root
+		if doc.CABundle != nil {
 			// Extract chain info
 			chainInfo, err := ExtractCertificateChainInfo(doc.CABundle)
 			if err == nil {
 				result.CertificateChain = chainInfo
 			}
 
-			// Verify chain of trust
-			if err := VerifyChainOfTrust(doc.Certificate, doc.CABundle, v.options.SkipTimestampCheck); err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("certificate chain validation failed: %w", err))
+			// Parse the certificate for chain verification
+			cert, err := x509.ParseCertificate(doc.Certificate)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("failed to parse certificate for chain validation: %w", err))
 			} else {
-				result.ChainValidated = true
+				// Verify chain of trust
+				if err := VerifyCertificateChain(cert, doc.CABundle, &v.options); err != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("certificate chain validation failed: %w", err))
+				} else {
+					result.ChainValidated = true
 
-				// Calculate root fingerprint
-				if len(doc.CABundle) > 0 {
-					rootCert, err := x509.ParseCertificate(doc.CABundle[0])
-					if err == nil {
-						result.RootFingerprint = CalculateCertificateFingerprint(rootCert)
+					// Calculate root fingerprint
+					if len(doc.CABundle) > 0 {
+						rootCert, err := x509.ParseCertificate(doc.CABundle[0])
+						if err == nil {
+							result.RootFingerprint = CalculateCertificateFingerprint(rootCert)
+						}
 					}
 				}
 			}
 		}
 	}
 
-	// Validate signature if not skipped
-	if !v.options.SkipSignatureVerification && len(doc.Certificate) > 0 {
+	// Validate signature
+	if len(doc.Certificate) > 0 {
 		if err := v.verifySignature(attestationBytes, doc); err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("signature verification failed: %w", err))
 		}
@@ -195,15 +199,13 @@ func (v *Verifier) verifySignature(attestationBytes []byte, doc *AttestationDocu
 		return fmt.Errorf("failed to create signature base: %w", err)
 	}
 
-	// Verify based on public key type
-	switch pub := cert.PublicKey.(type) {
-	case *ecdsa.PublicKey:
-		return v.verifyECDSA(pub, sigBase, signature)
-	case *rsa.PublicKey:
-		return v.verifyRSA(pub, sigBase, signature, protectedHeaders)
-	default:
-		return fmt.Errorf("unsupported public key type %T, only ECDSA and RSA keys are supported", pub)
+	// Verify ECDSA signature (AWS Nitro exclusively uses ECDSA)
+	pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("unsupported public key type %T: AWS Nitro attestation documents only use ECDSA keys", cert.PublicKey)
 	}
+
+	return v.verifyECDSA(pub, sigBase, signature)
 }
 
 // verifyECDSA verifies an ECDSA signature
@@ -251,54 +253,17 @@ func (v *Verifier) verifyECDSA(pub *ecdsa.PublicKey, sigBase, signature []byte) 
 	return errors.New("ECDSA signature verification failed (tried raw and ASN.1 formats)")
 }
 
-// verifyRSA verifies an RSA signature
-func (v *Verifier) verifyRSA(pub *rsa.PublicKey, sigBase, signature, protectedHeaders []byte) error {
-	// Parse protected headers to determine hash algorithm
-	var protected map[int]interface{}
-	if err := cbor.Unmarshal(protectedHeaders, &protected); err != nil {
-		return fmt.Errorf("failed to parse protected headers: %w", err)
-	}
-
-	// Default to SHA256
-	hashFunc := crypto.SHA256
-	h := sha256.Sum256(sigBase)
-	hash := h[:]
-
-	// Check if different algorithm is specified
-	if alg, ok := protected[1]; ok {
-		switch alg {
-		case -37: // PS256
-			hashFunc = crypto.SHA256
-		case -38: // PS384
-			hashFunc = crypto.SHA384
-			h384 := sha512.Sum384(sigBase)
-			hash = h384[:]
-		case -39: // PS512
-			hashFunc = crypto.SHA512
-			h512 := sha512.Sum512(sigBase)
-			hash = h512[:]
-		}
-	}
-
-	if err := rsa.VerifyPSS(pub, hashFunc, hash, signature, nil); err != nil {
-		return fmt.Errorf("RSA signature verification failed: %w", err)
-	}
-
-	return nil
-}
-
 // ValidateWithDefaults validates an attestation with default options
 func ValidateWithDefaults(attestationBase64 string) (*ValidationResult, error) {
-	validator := NewVerifier(ValidatorOptions{})
+	validator := NewVerifier(AWSNitroVerifierOptions{})
 	return validator.Validate(attestationBase64)
 }
 
 // ValidatePCRsOnly validates only the PCR values without signature or timestamp checks
 func ValidatePCRsOnly(attestationBase64 string, pcrRules []PCRRule) (*ValidationResult, error) {
-	validator := NewVerifier(ValidatorOptions{
-		SkipTimestampCheck:        true,
-		SkipSignatureVerification: true,
-		PCRRules:                  pcrRules,
+	validator := NewVerifier(AWSNitroVerifierOptions{
+		SkipTimestampCheck: true,
+		PCRRules:           pcrRules,
 	})
 	return validator.Validate(attestationBase64)
 }

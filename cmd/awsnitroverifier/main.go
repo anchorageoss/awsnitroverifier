@@ -44,10 +44,6 @@ func main() {
 						Value: true, // Default to true for test fixtures
 					},
 					&cli.BoolFlag{
-						Name:  "skip-signature",
-						Usage: "Skip signature verification",
-					},
-					&cli.BoolFlag{
 						Name:    "verbose",
 						Aliases: []string{"v"},
 						Usage:   "Verbose output with detailed validation results",
@@ -99,10 +95,6 @@ func main() {
 					&cli.BoolFlag{
 						Name:  "skip-timestamp",
 						Usage: "Skip certificate timestamp validation",
-					},
-					&cli.BoolFlag{
-						Name:  "skip-signature",
-						Usage: "Skip signature verification",
 					},
 					&cli.BoolFlag{
 						Name:    "verbose",
@@ -173,7 +165,6 @@ func runBasicVerification(ctx context.Context, cmd *cli.Command) error {
 	attestationFile := cmd.String("file")
 	pcrRules := cmd.String("pcrs")
 	skipTimestamp := cmd.Bool("skip-timestamp")
-	skipSignature := cmd.Bool("skip-signature")
 	verbose := cmd.Bool("verbose")
 
 	// Read the attestation file
@@ -189,9 +180,8 @@ func runBasicVerification(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Create validator with options
-	validator := nitroverifier.NewVerifier(nitroverifier.ValidatorOptions{
+	validator := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
 		SkipTimestampCheck:        skipTimestamp,
-		SkipSignatureVerification: skipSignature,
 		PCRRules:                  pcrValidations,
 	})
 
@@ -316,7 +306,6 @@ func runFullTurnkeyVerification(ctx context.Context, cmd *cli.Command) error {
 	outputFile := cmd.String("output")
 	pcrRules := cmd.String("pcrs")
 	skipTimestamp := cmd.Bool("skip-timestamp")
-	skipSignature := cmd.Bool("skip-signature")
 	verbose := cmd.Bool("verbose")
 	timestampOverride := cmd.String("timestamp")
 	messageHash := cmd.String("message")
@@ -346,9 +335,8 @@ func runFullTurnkeyVerification(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	// Setup validator options
-	validatorOptions := nitroverifier.ValidatorOptions{
+	validatorOptions := nitroverifier.AWSNitroVerifierOptions{
 		SkipTimestampCheck:        skipTimestamp,
-		SkipSignatureVerification: skipSignature,
 		PCRRules:                  pcrValidations,
 	}
 
@@ -358,7 +346,7 @@ func runFullTurnkeyVerification(ctx context.Context, cmd *cli.Command) error {
 		if err != nil {
 			return fmt.Errorf("error parsing timestamp override: %w", err)
 		}
-		validatorOptions.CurrentTime = &t
+		validatorOptions.CurrentTime = t
 	}
 
 	// Create validator and validate
@@ -406,8 +394,8 @@ func runFullTurnkeyVerification(ctx context.Context, cmd *cli.Command) error {
 
 		if !skipTimestamp {
 			checkTime := time.Now()
-			if validatorOptions.CurrentTime != nil {
-				checkTime = *validatorOptions.CurrentTime
+			if !validatorOptions.CurrentTime.IsZero() {
+				checkTime = validatorOptions.CurrentTime
 			}
 			fmt.Printf("  Checked at: %s\n", checkTime.Format(time.RFC3339)) //nolint:forbidigo
 		}
@@ -417,7 +405,7 @@ func runFullTurnkeyVerification(ctx context.Context, cmd *cli.Command) error {
 			fmt.Println("\n✅ Certificate Chain Validation:")                     //nolint:forbidigo
 			fmt.Printf("  Chain validated against AWS Nitro root certificate\n") //nolint:forbidigo
 			fmt.Printf("  Root fingerprint: %s\n", result.RootFingerprint)       //nolint:forbidigo
-		} else if !skipSignature {
+		} else {
 			fmt.Println("\n⚠️  Certificate chain not validated against AWS root") //nolint:forbidigo
 		}
 
