@@ -23,7 +23,7 @@ test: ## Run all tests with coverage
 	@echo ""
 	@echo "Filtering out cmd package from coverage (will be covered by integration tests)..."
 	@grep -v "/cmd/" coverage.out > coverage.filtered.out || true
-	@echo "mode: set" > coverage.out.tmp
+	@echo "mode: atomic" > coverage.out.tmp
 	@grep -v "^mode:" coverage.filtered.out >> coverage.out.tmp || true
 	@mv coverage.out.tmp coverage.out
 	@echo ""
