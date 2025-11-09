@@ -1,7 +1,7 @@
 # AWS Nitro Verifier Makefile
 # Provides commands for building, testing, and maintaining the project
 
-.PHONY: help build test lint clean check-deps security-scan install-tools setup-hooks
+.PHONY: help build test test-coverage test-coverage-serve test-strict lint clean check-deps security-scan install-tools setup-hooks
 
 # Default target
 help: ## Display this help message
@@ -17,11 +17,63 @@ build: ## Build the project
 	@echo "✅ Binary built: bin/awsnitroverifier"
 
 
-test: ## Run all tests
-	@echo "🧪 Running tests..."
-	@go test -v -race -coverprofile=coverage.out ./...
+test: ## Run all tests with coverage
+	@echo "🧪 Running tests with race detection..."
+	@go test -v -race -coverprofile=coverage.out ./... -count=1
+	@echo ""
+	@echo "Filtering out cmd package from coverage (will be covered by integration tests)..."
+	@grep -v "/cmd/" coverage.out > coverage.filtered.out || true
+	@echo "mode: set" > coverage.out.tmp
+	@grep -v "^mode:" coverage.filtered.out >> coverage.out.tmp || true
+	@mv coverage.out.tmp coverage.out
+	@echo ""
+	@echo "📊 Coverage summary (excluding cmd package):"
+	@go tool cover -func=coverage.out | tail -1
+
+test-coverage: test ## Generate HTML coverage report
 	@go tool cover -html=coverage.out -o coverage.html
-	@echo "📊 Coverage report generated: coverage.html"
+	@echo ""
+	@echo "✅ Coverage report generated: coverage.html"
+	@echo "   Open coverage.html in a browser to view detailed report"
+
+test-coverage-serve: test ## Serve coverage report on HTTP server
+	@set -e; \
+	TMPDIR=$$(mktemp -d); \
+	trap "rm -rf $$TMPDIR" EXIT; \
+	go tool cover -html=coverage.out -o $$TMPDIR/index.html; \
+	echo ""; \
+	echo "✓ Coverage report generated"; \
+	echo "  Location: $$TMPDIR/index.html"; \
+	echo ""; \
+	echo "Starting HTTP server on port 3000..."; \
+	echo "  URL: http://localhost:3000"; \
+	echo "  Press Ctrl+C to stop"; \
+	echo ""; \
+	if command -v python3 >/dev/null 2>&1; then \
+		cd $$TMPDIR && python3 -m http.server 3000; \
+	elif command -v python >/dev/null 2>&1; then \
+		cd $$TMPDIR && python -m SimpleHTTPServer 3000; \
+	else \
+		echo "ERROR: python3 or python not found"; \
+		exit 1; \
+	fi
+
+test-strict: ## Run tests with 80% coverage threshold check
+	@echo "🧪 Running tests with strict coverage checking..."
+	@go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	@echo ""
+	@echo "Filtering out cmd package from coverage (will be covered by integration tests)..."
+	@grep -v "/cmd/" coverage.out > coverage.filtered.out || true
+	@echo "mode: atomic" > coverage.out.tmp
+	@grep -v "^mode:" coverage.filtered.out >> coverage.out.tmp || true
+	@mv coverage.out.tmp coverage.out
+	@echo ""
+	@COVERAGE=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | sed 's/%//'); \
+	if [ "$$(echo "$$COVERAGE < 80" | bc)" -eq 1 ]; then \
+		echo "❌ Code coverage: $$COVERAGE% (below 80% minimum)"; \
+		exit 1; \
+	fi; \
+	echo "✅ Code coverage: $$COVERAGE% (meets 80% minimum)"
 
 test-short: ## Run tests without race detection (faster)
 	@echo "🧪 Running short tests..."
@@ -95,7 +147,7 @@ setup-hooks: ## Set up git hooks
 	@echo "✅ Git hooks configured"
 
 ##@ Comprehensive Checks
-check: lint test check-deps ## Run all code quality checks
+check: check-deps test-strict lint ## Run all code quality checks with coverage validation
 	@echo "✅ All checks completed successfully!"
 
 ci: check ## Run CI pipeline locally

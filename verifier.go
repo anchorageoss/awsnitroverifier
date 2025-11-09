@@ -226,31 +226,22 @@ func (v *Verifier) verifyECDSA(pub *ecdsa.PublicKey, sigBase, signature []byte) 
 		return fmt.Errorf("unsupported curve size: %d", pub.Curve.Params().BitSize)
 	}
 
-	// AWS Nitro uses raw ECDSA signatures (r||s format), not ASN.1 DER encoded
+	// AWS Nitro uses raw ECDSA signatures (r||s format)
 	// The signature should be exactly twice the key size
 	keySize := (pub.Curve.Params().BitSize + 7) / 8
-	var rawVerified bool
 	if len(signature) != 2*keySize {
-		return fmt.Errorf("invalid ECDSA signature: neither raw (expected length %d, got %d) nor ASN.1 format verified", 2*keySize, len(signature))
-	}
-	if len(signature) == 2*keySize {
-		// Split signature into r and s components
-		r := new(big.Int).SetBytes(signature[:keySize])
-		s := new(big.Int).SetBytes(signature[keySize:])
-		rawVerified = ecdsa.Verify(pub, hash, r, s)
+		return fmt.Errorf("invalid ECDSA signature length: expected %d bytes, got %d", 2*keySize, len(signature))
 	}
 
-	// verified ECDSA
-	if rawVerified {
-		return nil
+	// Split signature into r and s components
+	r := new(big.Int).SetBytes(signature[:keySize])
+	s := new(big.Int).SetBytes(signature[keySize:])
+
+	if !ecdsa.Verify(pub, hash, r, s) {
+		return errors.New("ECDSA signature verification failed")
 	}
 
-	// Try ASN.1 format as fallback
-	if ecdsa.VerifyASN1(pub, hash, signature) {
-		return nil
-	}
-
-	return errors.New("ECDSA signature verification failed (tried raw and ASN.1 formats)")
+	return nil
 }
 
 // ValidateWithDefaults validates an attestation with default options
