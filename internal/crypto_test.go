@@ -1,6 +1,6 @@
 //go:build !selectTest || isolatedTest
 
-package nitroverifier
+package internal
 
 import (
 	"crypto/ecdsa"

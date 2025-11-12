@@ -1,44 +1,10 @@
 //go:build !selectTest || isolatedTest
 
-package nitroverifier
+package internal
 
-import (
-	_ "embed"
-	"strings"
-)
-
-// Embedded attestation fixtures for testing
-// These include both Turnkey-specific attestations and generic AWS examples
-
-//go:embed testdata/turnkey-prod.base64
-var turnkeyProductionAttestation string
-
-//go:embed testdata/aws-nitro-example.base64
-var awsNitroExampleAttestation string //nolint:unused // Reserved for future AWS Nitro example fixtures
-
-// turnkeyFixtures provides access to embedded Turnkey attestation test data (test-only)
-var turnkeyFixtures = struct {
-	Production string
-}{
-	Production: strings.TrimSpace(turnkeyProductionAttestation),
-}
-
-// awsFixtures provides access to generic AWS Nitro attestation examples (test-only)
-var awsFixtures = struct { //nolint:unused // Reserved for future AWS Nitro example fixtures
-	Example string
-}{
-	Example: strings.TrimSpace(awsNitroExampleAttestation),
-}
-
-// getTurnkeyProductionAttestation returns a Turnkey production attestation document for testing
-func getTurnkeyProductionAttestation() string {
-	return turnkeyFixtures.Production
-}
-
-// getAWSExampleAttestation returns a generic AWS Nitro attestation example for testing
-func getAWSExampleAttestation() string { //nolint:unused // Reserved for future AWS Nitro example fixtures
-	return awsFixtures.Example
-}
+// Note: Attestation fixtures are embedded and managed in the root package test_helpers.go
+// using //go:embed. This allows the root package tests and the internal package tests
+// to share the same test data files.
 
 // Commands to obtain attestation documents:
 //

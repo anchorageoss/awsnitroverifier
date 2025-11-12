@@ -5,71 +5,59 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/fxamacker/cbor/v2"
 )
 
-// Verifier provides methods to validate AWS Nitro attestations
-type Verifier struct {
+// verifier implements the Verifier interface
+type verifier struct {
 	options AWSNitroVerifierOptions
 }
 
 // NewVerifier creates a new attestation validator with the given options
-func NewVerifier(options AWSNitroVerifierOptions) *Verifier {
-	return &Verifier{
+func NewVerifier(options AWSNitroVerifierOptions) Verifier {
+	return &verifier{
 		options: options,
 	}
 }
 
-// Validate performs validation on a base64-encoded attestation document
-func (v *Verifier) Validate(attestationBase64 string) (*ValidationResult, error) {
-	// Decode base64
-	attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64 attestation: %w", err)
-	}
-
-	return v.ValidateBytes(attestationBytes)
+// Validate performs validation on attestation document bytes
+func (v *verifier) Validate(attestationBytes []byte) (*ValidationResult, error) {
+	return v.validateBytes(attestationBytes)
 }
 
-// ValidateBytes performs validation on raw attestation document bytes
-func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, error) {
-	result := &ValidationResult{
-		Errors: []error{},
-	}
+// validateBytes performs validation on raw attestation document bytes
+func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, error) {
+	result := &ValidationResult{}
+	hasErrors := false
 
 	// Parse the outer COSE Sign1 structure
 	var coseSign1 interface{}
 	if err := cbor.Unmarshal(attestationBytes, &coseSign1); err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("failed to parse COSE Sign1: %w", err))
 		return result, nil
 	}
 
 	// Extract the payload (attestation document)
 	coseArray, ok := coseSign1.([]interface{})
 	if !ok || len(coseArray) < 3 {
-		result.Errors = append(result.Errors, errors.New("invalid COSE Sign1 structure"))
 		return result, nil
 	}
 
 	payload, ok := coseArray[2].([]byte)
 	if !ok {
-		result.Errors = append(result.Errors, errors.New("failed to extract payload from COSE Sign1"))
 		return result, nil
 	}
 
 	// Parse the attestation document
-	doc, err := ParseAttestationDocument(payload)
+	doc, err := internal.ParseAttestationDocument(payload)
 	if err != nil {
-		result.Errors = append(result.Errors, fmt.Errorf("failed to parse attestation document: %w", err))
 		return result, nil
 	}
-	result.Document = doc
 
 	// Copy optional fields to result for easy access
 	result.UserData = doc.UserData
@@ -78,41 +66,34 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 
 	// Parse certificate information
 	if len(doc.Certificate) > 0 {
-		certInfo, err := ExtractCertificateInfo(doc.Certificate)
+		certInfo, err := internal.ExtractCertificateInfo(doc.Certificate)
 		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("failed to parse certificate: %w", err))
+			hasErrors = true
 		} else {
-			result.CertificateInfo = certInfo
-
 			// Validate certificate timestamp if not skipped
 			if !v.options.SkipTimestampCheck {
 				checkTime := time.Now()
-				if !v.options.CurrentTime.IsZero() {
-					checkTime = v.options.CurrentTime
-				}
-
-				if err := ValidateCertificateTimestamp(certInfo, checkTime); err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("certificate timestamp validation failed: %w", err))
+				if err := internal.ValidateCertificateTimestamp(certInfo, checkTime); err != nil {
+					hasErrors = true
 				}
 			}
 		}
 
 		// Validate certificate chain against AWS root
 		if doc.CABundle != nil {
-			// Extract chain info
-			chainInfo, err := ExtractCertificateChainInfo(doc.CABundle)
-			if err == nil {
-				result.CertificateChain = chainInfo
-			}
-
 			// Parse the certificate for chain verification
 			cert, err := x509.ParseCertificate(doc.Certificate)
 			if err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("failed to parse certificate for chain validation: %w", err))
+				hasErrors = true
 			} else {
+				// Convert options to internal format
+				internalOpts := &internal.AWSNitroVerifierOptions{
+					SkipTimestampCheck: v.options.SkipTimestampCheck,
+				}
+
 				// Verify chain of trust
-				if err := VerifyCertificateChain(cert, doc.CABundle, &v.options); err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("certificate chain validation failed: %w", err))
+				if err := internal.VerifyCertificateChain(cert, doc.CABundle, internalOpts); err != nil {
+					hasErrors = true
 				} else {
 					result.ChainValidated = true
 
@@ -120,7 +101,7 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 					if len(doc.CABundle) > 0 {
 						rootCert, err := x509.ParseCertificate(doc.CABundle[0])
 						if err == nil {
-							result.RootFingerprint = CalculateCertificateFingerprint(rootCert)
+							result.RootFingerprint = internal.CalculateCertificateFingerprint(rootCert)
 						}
 					}
 				}
@@ -131,30 +112,49 @@ func (v *Verifier) ValidateBytes(attestationBytes []byte) (*ValidationResult, er
 	// Validate signature
 	if len(doc.Certificate) > 0 {
 		if err := v.verifySignature(attestationBytes, doc); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("signature verification failed: %w", err))
+			hasErrors = true
 		}
 	}
 
 	// Validate PCRs if rules are provided
 	if len(v.options.PCRRules) > 0 {
-		result.PCRValidations = ValidatePCRs(doc.PCRs, v.options.PCRRules)
+		// Convert public PCRRules to internal format
+		internalPCRRules := make([]internal.PCRRule, len(v.options.PCRRules))
+		for i, rule := range v.options.PCRRules {
+			internalPCRRules[i] = internal.PCRRule{
+				Index: rule.Index,
+				Value: rule.Value,
+			}
+		}
 
-		// Check for any PCR validation failures
-		for _, pcrResult := range result.PCRValidations {
-			if !pcrResult.Valid && pcrResult.Error != nil {
-				result.Errors = append(result.Errors, pcrResult.Error)
+		internalResults := internal.ValidatePCRs(doc.PCRs, internalPCRRules)
+
+		// Convert internal results to public format
+		result.PCRValidations = make([]PCRValidationResult, len(internalResults))
+		for i, internalResult := range internalResults {
+			result.PCRValidations[i] = PCRValidationResult{
+				Index:    internalResult.Index,
+				Expected: internalResult.Expected,
+				Actual:   internalResult.Actual,
+				Valid:    internalResult.Valid,
+				Error:    internalResult.Error,
+			}
+
+			// Check for any PCR validation failures
+			if !internalResult.Valid && internalResult.Error != nil {
+				hasErrors = true
 			}
 		}
 	}
 
 	// Set overall validation result
-	result.Valid = len(result.Errors) == 0
+	result.Valid = !hasErrors
 
 	return result, nil
 }
 
 // verifySignature verifies the COSE Sign1 signature
-func (v *Verifier) verifySignature(attestationBytes []byte, doc *AttestationDocument) error {
+func (v *verifier) verifySignature(attestationBytes []byte, doc *internal.AttestationDocument) error {
 	// Parse the certificate
 	cert, err := x509.ParseCertificate(doc.Certificate)
 	if err != nil {
@@ -177,7 +177,6 @@ func (v *Verifier) verifySignature(attestationBytes []byte, doc *AttestationDocu
 	if !ok {
 		return errors.New("invalid protected headers type")
 	}
-	// unprotectedHeaders := coseArray[1] // Not used in Sign1
 	payload, ok := coseArray[2].([]byte)
 	if !ok {
 		return errors.New("invalid payload type")
@@ -209,7 +208,7 @@ func (v *Verifier) verifySignature(attestationBytes []byte, doc *AttestationDocu
 }
 
 // verifyECDSA verifies an ECDSA signature
-func (v *Verifier) verifyECDSA(pub *ecdsa.PublicKey, sigBase, signature []byte) error {
+func (v *verifier) verifyECDSA(pub *ecdsa.PublicKey, sigBase, signature []byte) error {
 	// Determine hash based on curve size
 	var hash []byte
 	switch pub.Curve.Params().BitSize {
@@ -242,19 +241,4 @@ func (v *Verifier) verifyECDSA(pub *ecdsa.PublicKey, sigBase, signature []byte) 
 	}
 
 	return nil
-}
-
-// ValidateWithDefaults validates an attestation with default options
-func ValidateWithDefaults(attestationBase64 string) (*ValidationResult, error) {
-	validator := NewVerifier(AWSNitroVerifierOptions{})
-	return validator.Validate(attestationBase64)
-}
-
-// ValidatePCRsOnly validates only the PCR values without signature or timestamp checks
-func ValidatePCRsOnly(attestationBase64 string, pcrRules []PCRRule) (*ValidationResult, error) {
-	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck: true,
-		PCRRules:           pcrRules,
-	})
-	return validator.Validate(attestationBase64)
 }

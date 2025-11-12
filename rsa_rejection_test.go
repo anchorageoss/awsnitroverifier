@@ -7,9 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"math/big"
-	"strings"
 	"testing"
 	"time"
 
@@ -65,34 +63,26 @@ func TestUnsupportedKeyTypeRejection(t *testing.T) {
 	}
 
 	attestationBytes, _ := cbor.Marshal(coseSign1)
-	attestationBase64 := base64.StdEncoding.EncodeToString(attestationBytes)
 
 	// Attempt to validate
 	verifier := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck: true,
 	})
 
-	result, err := verifier.Validate(attestationBase64)
+	result, err := verifier.Validate(attestationBytes)
 	if err != nil {
 		t.Fatalf("Unexpected fatal error: %v", err)
 	}
 
 	// Should have validation errors
 	if result.Valid {
-		t.Error("Expected validation to fail for unsupported key type")
+		t.Error("Expected validation to fail for unsupported RSA key type")
+	} else {
+		t.Log("✓ Unsupported RSA key type properly rejected")
 	}
 
-	// Check for unsupported key type error
-	foundKeyTypeError := false
-	for _, err := range result.Errors {
-		if strings.Contains(err.Error(), "unsupported public key type") && strings.Contains(err.Error(), "ECDSA") {
-			foundKeyTypeError = true
-			t.Logf("✓ Unsupported key type properly rejected: %v", err)
-			break
-		}
-	}
-
-	if !foundKeyTypeError {
-		t.Errorf("Expected error about unsupported key type, got errors: %v", result.Errors)
+	// AWS Nitro only supports ECDSA keys, not RSA
+	if result.ChainValidated {
+		t.Error("Chain should not validate with RSA certificate")
 	}
 }

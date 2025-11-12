@@ -1,4 +1,4 @@
-package nitroverifier
+package internal
 
 import (
 	"bytes"

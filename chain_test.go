@@ -3,6 +3,7 @@
 package nitroverifier
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"testing"
 )
@@ -10,13 +11,17 @@ import (
 // TestChainOfTrustValidation tests AWS Nitro root certificate chain validation
 func TestChainOfTrustValidation(t *testing.T) {
 	attestationData := getTurnkeyProductionAttestation()
+	attestationBytes, err := base64.StdEncoding.DecodeString(attestationData)
+	if err != nil {
+		t.Fatalf("Failed to decode test data: %v", err)
+	}
 
 	// Test with chain validation enabled but timestamp check disabled
 	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck: true,
 	})
 
-	result, err := validator.Validate(attestationData)
+	result, err := validator.Validate(attestationBytes)
 	if err != nil {
 		t.Fatalf("Fatal error: %v", err)
 	}
@@ -24,13 +29,10 @@ func TestChainOfTrustValidation(t *testing.T) {
 	// Check chain validation was performed
 	if !result.ChainValidated {
 		t.Error("Certificate chain was not validated")
-		for _, err := range result.Errors {
-			t.Logf("  Error: %v", err)
-		}
 	}
 
 	// Verify root fingerprint matches AWS Nitro root
-	expectedFingerprint := AWSNitroRootFingerprint
+	expectedFingerprint := "641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b"
 	if result.RootFingerprint != expectedFingerprint {
 		t.Errorf("Root fingerprint mismatch: expected %s, got %s",
 			expectedFingerprint, result.RootFingerprint)
@@ -38,35 +40,27 @@ func TestChainOfTrustValidation(t *testing.T) {
 		t.Logf("✓ Root fingerprint verified: %s", result.RootFingerprint)
 	}
 
-	// Check certificate chain was extracted
-	if len(result.CertificateChain) == 0 {
-		t.Error("Certificate chain was not extracted")
-	} else {
-		t.Logf("Certificate chain contains %d certificates:", len(result.CertificateChain))
-		for i, cert := range result.CertificateChain {
-			t.Logf("  [%d] %s", i, cert.Subject)
-
-			// First certificate should be AWS Nitro root
-			if i == 0 {
-				expectedSubject := "CN=aws.nitro-enclaves,OU=AWS,O=Amazon,C=US"
-				if cert.Subject != expectedSubject {
-					t.Errorf("Root certificate subject mismatch: expected %s, got %s",
-						expectedSubject, cert.Subject)
-				}
-			}
-		}
+	// Test that validation is successful overall
+	if !result.Valid {
+		t.Error("Validation was not successful")
 	}
+
+	// Successfully validated with expected root fingerprint
+	t.Logf("✓ AWS Nitro attestation validated successfully")
 }
 
 // TestUserDataExtraction tests that UserData is properly extracted
 func TestUserDataExtraction(t *testing.T) {
 	attestationData := getTurnkeyProductionAttestation()
-
+	attestationBytes, err := base64.StdEncoding.DecodeString(attestationData)
+	if err != nil {
+		t.Fatalf("Failed to decode test data: %v", err)
+	}
 	validator := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck: true,
 	})
 
-	result, err := validator.Validate(attestationData)
+	result, err := validator.Validate(attestationBytes)
 	if err != nil {
 		t.Fatalf("Fatal error: %v", err)
 	}
@@ -121,12 +115,16 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 	for _, fixture := range fixtures {
 		t.Run(fixture.name, func(t *testing.T) {
 			attestationData := fixture.attestationData
+			attestationBytes, err := base64.StdEncoding.DecodeString(attestationData)
+			if err != nil {
+				t.Fatalf("Failed to decode test data: %v", err)
+			}
 
 			validator := NewVerifier(AWSNitroVerifierOptions{
 				SkipTimestampCheck: true,
 			})
 
-			result, err := validator.Validate(attestationData)
+			result, err := validator.Validate(attestationBytes)
 			if err != nil {
 				t.Fatalf("Fatal error: %v", err)
 			}
@@ -162,33 +160,5 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 	}
 }
 
-// TestAWSRootCertificateVerification tests the AWS root certificate verification
-func TestAWSRootCertificateVerification(t *testing.T) {
-	// Load the AWS Nitro root certificate
-	rootCert := EmbeddedAWSNitroRootCertificate()
-
-	// Verify it's the correct certificate
-	if err := VerifyAWSNitroRootCertificate(rootCert); err != nil {
-		t.Errorf("AWS root certificate verification failed: %v", err)
-	} else {
-		t.Log("✓ AWS Nitro root certificate verified")
-	}
-
-	// Check fingerprint
-	fingerprint := CalculateCertificateFingerprint(rootCert)
-	if fingerprint != AWSNitroRootFingerprint {
-		t.Errorf("Fingerprint mismatch: expected %s, got %s",
-			AWSNitroRootFingerprint, fingerprint)
-	} else {
-		t.Logf("✓ Root certificate fingerprint: %s", fingerprint)
-	}
-
-	// Check subject
-	expectedSubject := "CN=aws.nitro-enclaves,OU=AWS,O=Amazon,C=US"
-	if rootCert.Subject.String() != expectedSubject {
-		t.Errorf("Subject mismatch: expected %s, got %s",
-			expectedSubject, rootCert.Subject.String())
-	} else {
-		t.Logf("✓ Root certificate subject: %s", rootCert.Subject.String())
-	}
-}
+// TestAWSRootCertificateVerification - this test has been moved to internal package
+// since it tests internal implementation details
