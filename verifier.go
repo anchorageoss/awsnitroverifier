@@ -65,22 +65,22 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 	result.Nonce = doc.Nonce
 
 	// Now perform validations - accumulate errors in result.Errors
-	var validationErrors []string
+	var validationErrors []error
 
 	// Validate certificate chain and signature
 	if len(doc.Certificate) > 0 {
 		// Parse certificate for chain verification
 		cert, err := x509.ParseCertificate(doc.Certificate)
 		if err != nil {
-			validationErrors = append(validationErrors, fmt.Sprintf("certificate parsing: %v", err))
+			validationErrors = append(validationErrors, fmt.Errorf("certificate parsing: %v", err))
 		} else {
 			// Validate certificate timestamp if not skipped
 			if !v.options.SkipTimestampCheck {
 				certInfo, err := internal.ExtractCertificateInfo(doc.Certificate)
 				if err != nil {
-					validationErrors = append(validationErrors, fmt.Sprintf("certificate extraction: %v", err))
+					validationErrors = append(validationErrors, fmt.Errorf("certificate extraction: %v", err))
 				} else if err := internal.ValidateCertificateTimestamp(certInfo, time.Now()); err != nil {
-					validationErrors = append(validationErrors, fmt.Sprintf("certificate expired: %v", err))
+					validationErrors = append(validationErrors, fmt.Errorf("certificate expired: %v", err))
 				}
 			}
 
@@ -88,7 +88,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 			if doc.CABundle != nil {
 				internalOpts := internal.FromPublicOptions(v.options)
 				if err := internal.VerifyCertificateChain(cert, doc.CABundle, internalOpts); err != nil {
-					validationErrors = append(validationErrors, fmt.Sprintf("certificate chain: %v", err))
+					validationErrors = append(validationErrors, fmt.Errorf("certificate chain: %v", err))
 				} else {
 					result.ChainTrusted = true
 					// Calculate root fingerprint
@@ -103,7 +103,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 
 			// Validate signature
 			if err := v.verifySignature(attestationBytes, doc); err != nil {
-				validationErrors = append(validationErrors, fmt.Sprintf("signature: %v", err))
+				validationErrors = append(validationErrors, fmt.Errorf("signature: %v", err))
 			}
 		}
 	}
@@ -116,9 +116,9 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 		for _, pcr := range result.PCRResults {
 			if !pcr.Valid {
 				if pcr.Actual == nil {
-					validationErrors = append(validationErrors, fmt.Sprintf("PCR[%d] not found in attestation", pcr.Index))
+					validationErrors = append(validationErrors, fmt.Errorf("PCR[%d] not found in attestation", pcr.Index))
 				} else {
-					validationErrors = append(validationErrors, fmt.Sprintf("PCR[%d] mismatch", pcr.Index))
+					validationErrors = append(validationErrors, fmt.Errorf("PCR[%d] mismatch", pcr.Index))
 				}
 			}
 		}

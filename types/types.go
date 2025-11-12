@@ -38,7 +38,7 @@ type ValidationResult struct {
 
 	// Validation errors - empty if Valid is true
 	// Each entry describes a specific validation failure
-	Errors []string
+	Errors []error
 
 	// Certificate chain validation details
 	ChainTrusted    bool   // True if certificate chain validated to AWS Nitro root

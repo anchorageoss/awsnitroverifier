@@ -3,10 +3,23 @@
 package awsnitroverifier
 
 import (
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 	"testing"
+
+	"github.com/anchorageoss/awsnitroverifier/internal"
 )
+
+// AWS Nitro attestation documents from Veracruz project
+// Source: https://github.com/veracruz-project/go-nitro-enclave-attestation-document/blob/main/test/aws_nitro_document.cbor
+
+//go:embed testdata/aws_nitro_document.base64
+var awsNitroDocumentBase64 string
+
+//go:embed testdata/aws_nitro_document.cbor
+var awsNitroDocumentCbor []byte
 
 // TestChainOfTrustValidation tests AWS Nitro root certificate chain validation
 func TestChainOfTrustValidation(t *testing.T) {
@@ -31,11 +44,10 @@ func TestChainOfTrustValidation(t *testing.T) {
 		t.Errorf("Certificate chain was not validated, errors: %v", result.Errors)
 	}
 
-	// Verify root fingerprint matches AWS Nitro root
-	expectedFingerprint := "641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b"
-	if result.RootFingerprint != expectedFingerprint {
+	// Verify root fingerprint matches AWS Nitro root using built-in constant
+	if result.RootFingerprint != internal.AWSNitroRootFingerprint {
 		t.Errorf("Root fingerprint mismatch: expected %s, got %s",
-			expectedFingerprint, result.RootFingerprint)
+			internal.AWSNitroRootFingerprint, result.RootFingerprint)
 	} else {
 		t.Logf("✓ Root fingerprint verified: %s", result.RootFingerprint)
 	}
@@ -162,3 +174,76 @@ func TestTurnkeyUserDataValidation(t *testing.T) {
 
 // TestAWSRootCertificateVerification - this test has been moved to internal package
 // since it tests internal implementation details
+
+// TestAWSNitroFixtures tests AWS Nitro attestation documents from Veracruz project
+// These documents are sourced from: https://github.com/veracruz-project/go-nitro-enclave-attestation-document/blob/main/test/aws_nitro_document.cbor
+func TestAWSNitroFixtures(t *testing.T) {
+	testCases := []struct {
+		name            string
+		attestationData []byte
+		description     string
+	}{
+		{
+			name: "AWS Nitro Document (Base64)",
+			attestationData: func() []byte {
+				data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(awsNitroDocumentBase64))
+				if err != nil {
+					panic("Failed to decode embedded base64 data: " + err.Error())
+				}
+				return data
+			}(),
+			description: "Base64 encoded version",
+		},
+		{
+			name:            "AWS Nitro Document (CBOR)",
+			attestationData: awsNitroDocumentCbor,
+			description:     "Raw CBOR bytes",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test with chain validation enabled but timestamp check disabled
+			// (These are older certificates that may have expired)
+			validator := NewVerifier(AWSNitroVerifierOptions{
+				SkipTimestampCheck: true,
+			})
+
+			result, err := validator.Validate(tc.attestationData)
+			if err != nil {
+				t.Fatalf("Fatal error validating %s: %v", tc.description, err)
+			}
+
+			// Check chain validation was performed
+			if !result.ChainTrusted {
+				t.Errorf("Certificate chain was not validated for %s, errors: %v", tc.description, result.Errors)
+			}
+
+			// Verify root fingerprint matches AWS Nitro root using built-in constant
+			if result.RootFingerprint != internal.AWSNitroRootFingerprint {
+				t.Errorf("Root fingerprint mismatch for %s: expected %s, got %s",
+					tc.description, internal.AWSNitroRootFingerprint, result.RootFingerprint)
+			} else {
+				t.Logf("✓ Root fingerprint verified for %s: %s", tc.description, result.RootFingerprint)
+			}
+
+			// Test that validation is successful overall
+			if !result.Valid {
+				t.Errorf("Validation was not successful for %s, errors: %v", tc.description, result.Errors)
+			} else {
+				t.Logf("✓ AWS Nitro attestation (%s) validated successfully", tc.description)
+			}
+
+			// Log some details about the attestation
+			if len(result.UserData) > 0 {
+				t.Logf("  UserData: %d bytes (%s)", len(result.UserData), hex.EncodeToString(result.UserData))
+			}
+			if len(result.PublicKey) > 0 {
+				t.Logf("  PublicKey: %d bytes", len(result.PublicKey))
+			}
+			if len(result.Nonce) > 0 {
+				t.Logf("  Nonce: %d bytes", len(result.Nonce))
+			}
+		})
+	}
+}

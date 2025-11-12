@@ -101,20 +101,33 @@ func TestValidationResultFields(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test all public fields are accessible
-	t.Run("FieldAccess", func(t *testing.T) {
-		// Core fields
-		_ = result.Valid
-		_ = result.Errors
-		_ = result.ChainTrusted
-		_ = result.RootFingerprint
+	t.Run("PublicAPIContract", func(t *testing.T) {
+		// Verify that VerificationResult maintains its public API contract
+		// This test will fail to compile if any of these fields become private
+		// or are removed, helping prevent accidental breaking changes.
 
-		// Optional fields
-		_ = result.UserData
-		_ = result.PublicKey
-		_ = result.Nonce
-		_ = result.PCRResults
+		var apiFields = struct {
+			Valid           bool
+			Errors          []error
+			ChainTrusted    bool
+			RootFingerprint string
+			UserData        []byte
+			PublicKey       []byte
+			Nonce           []byte
+			PCRResults      []PCRValidationResult
+		}{
+			Valid:           result.Valid,
+			Errors:          result.Errors,
+			ChainTrusted:    result.ChainTrusted,
+			RootFingerprint: result.RootFingerprint,
+			UserData:        result.UserData,
+			PublicKey:       result.PublicKey,
+			Nonce:           result.Nonce,
+			PCRResults:      result.PCRResults,
+		}
 
-		t.Log("✓ All public fields are accessible")
+		_ = apiFields // Suppress unused variable warning
+		t.Log("✓ All public API fields are accessible")
 	})
 
 	// Verify field values make sense
@@ -156,8 +169,9 @@ func TestSignatureVerification(t *testing.T) {
 
 		// Valid attestation should have no certificate chain errors
 		for _, errMsg := range result.Errors {
-			require.NotContains(t, errMsg, "certificate", "Valid attestation had certificate error")
-			require.NotContains(t, errMsg, "signature", "Valid attestation had signature error")
+			errStr := errMsg.Error()
+			require.NotContains(t, errStr, "certificate", "Valid attestation had certificate error")
+			require.NotContains(t, errStr, "signature", "Valid attestation had signature error")
 		}
 	})
 
@@ -177,7 +191,7 @@ func TestSignatureVerification(t *testing.T) {
 		// Should have signature-related error
 		found := false
 		for _, errMsg := range result.Errors {
-			if len(errMsg) > 0 {
+			if errMsg != nil && len(errMsg.Error()) > 0 {
 				found = true
 				break
 			}

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -143,7 +144,7 @@ func TestValidationResult(t *testing.T) {
 			name: "Valid result",
 			result: ValidationResult{
 				Valid:  true,
-				Errors: []string{},
+				Errors: []error{},
 			},
 			wantValid:         true,
 			wantChainTrusted:  false,
@@ -156,9 +157,9 @@ func TestValidationResult(t *testing.T) {
 			name: "Invalid result with errors",
 			result: ValidationResult{
 				Valid: false,
-				Errors: []string{
-					"error 1",
-					"error 2",
+				Errors: []error{
+					fmt.Errorf("error 1"),
+					fmt.Errorf("error 2"),
 				},
 				ChainTrusted: false,
 			},
@@ -173,7 +174,7 @@ func TestValidationResult(t *testing.T) {
 			name: "Result with attestation fields",
 			result: ValidationResult{
 				Valid:     true,
-				Errors:    []string{},
+				Errors:    []error{},
 				UserData:  []byte("user-data"),
 				PublicKey: []byte("public-key"),
 				Nonce:     []byte("nonce"),
@@ -203,7 +204,7 @@ func TestValidationResult(t *testing.T) {
 			name: "Result with PCR validation results",
 			result: ValidationResult{
 				Valid:  false,
-				Errors: []string{"PCR mismatch"},
+				Errors: []error{fmt.Errorf("PCR mismatch")},
 				PCRResults: []PCRValidationResult{
 					{
 						Index:    0,
