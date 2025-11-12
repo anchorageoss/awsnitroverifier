@@ -69,11 +69,14 @@ test-strict: ## Run tests with 80% coverage threshold check
 	@mv coverage.out.tmp coverage.out
 	@echo ""
 	@COVERAGE=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | sed 's/%//'); \
-	if [ "$$(echo "$$COVERAGE < 80" | bc)" -eq 1 ]; then \
-		echo "❌ Code coverage: $$COVERAGE% (below 80% minimum)"; \
-		exit 1; \
-	fi; \
-	echo "✅ Code coverage: $$COVERAGE% (meets 80% minimum)"
+	awk -v coverage="$$COVERAGE" 'BEGIN { \
+		if (coverage < 80) { \
+			print "❌ Code coverage: " coverage "% (below 80% minimum)"; \
+			exit 1; \
+		}; \
+		print "✅ Code coverage: " coverage "% (meets 80% minimum)"; \
+		exit 0; \
+	}'
 
 test-short: ## Run tests without race detection (faster)
 	@echo "🧪 Running short tests..."
