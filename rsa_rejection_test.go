@@ -82,7 +82,7 @@ func TestUnsupportedKeyTypeRejection(t *testing.T) {
 	}
 
 	// AWS Nitro only supports ECDSA keys, not RSA
-	if result.ChainValidated {
+	if result.ChainTrusted {
 		t.Error("Chain should not validate with RSA certificate")
 	}
 }

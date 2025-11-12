@@ -37,16 +37,16 @@ func TestPublicAPIBasic(t *testing.T) {
 		})
 		result, err := verifier.Validate(attestationBytes)
 		if err != nil {
-			t.Fatalf("Fatal error: %v", err)
+			t.Fatalf("Unexpected error: %v", err)
 		}
 
 		// Should pass with timestamp check disabled
 		if !result.Valid {
-			t.Error("Expected validation to pass with timestamp check disabled")
+			t.Errorf("Expected validation to pass, got errors: %v", result.Errors)
 		}
 
 		// Check chain validation
-		if !result.ChainValidated {
+		if !result.ChainTrusted {
 			t.Error("Expected certificate chain to be validated")
 		}
 
@@ -70,47 +70,44 @@ func TestPublicAPIBasic(t *testing.T) {
 
 // TestInvalidAttestationData tests error handling for invalid input
 func TestInvalidAttestationData(t *testing.T) {
+	verifier := NewVerifier(AWSNitroVerifierOptions{
+		SkipTimestampCheck: true,
+	})
+
 	testCases := []struct {
 		name             string
 		attestationBytes []byte
 		expectError      bool
-		expectValid      bool
 	}{
 		{
 			name:             "Empty bytes",
 			attestationBytes: []byte{},
-			expectError:      false,
-			expectValid:      false,
+			expectError:      true,
 		},
 		{
 			name:             "Invalid CBOR data",
 			attestationBytes: []byte("not-valid-cbor!@#$"),
-			expectError:      false,
-			expectValid:      false,
+			expectError:      true,
 		},
 		{
 			name:             "Valid bytes but not CBOR",
 			attestationBytes: []byte("hello world"),
-			expectError:      false,
-			expectValid:      false,
+			expectError:      true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			verifier := NewVerifier(AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-			})
 			result, err := verifier.Validate(tc.attestationBytes)
 
 			if tc.expectError && err == nil {
-				t.Error("Expected error but got none")
+				t.Error("Expected error for malformed input but got none")
 			}
 			if !tc.expectError && err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
-			if result != nil && result.Valid != tc.expectValid {
-				t.Errorf("Expected Valid=%v, got %v", tc.expectValid, result.Valid)
+			if err != nil && result != nil {
+				t.Error("Should not return result when error is non-nil")
 			}
 		})
 	}
@@ -137,21 +134,23 @@ func TestValidationResultFields(t *testing.T) {
 	t.Run("FieldAccess", func(t *testing.T) {
 		// Core fields
 		_ = result.Valid
-		_ = result.ChainValidated
+		_ = result.Errors
+		_ = result.ChainTrusted
 		_ = result.RootFingerprint
 
 		// Optional fields
 		_ = result.UserData
 		_ = result.PublicKey
 		_ = result.Nonce
+		_ = result.PCRResults
 
 		t.Log("✓ All public fields are accessible")
 	})
 
 	// Verify field values make sense
 	t.Run("FieldValues", func(t *testing.T) {
-		if result.ChainValidated && result.RootFingerprint == "" {
-			t.Error("Chain validated but no root fingerprint")
+		if result.ChainTrusted && result.RootFingerprint == "" {
+			t.Error("Chain trusted but no root fingerprint")
 		}
 
 		if result.UserData != nil && len(result.UserData) == 0 {
@@ -160,6 +159,10 @@ func TestValidationResultFields(t *testing.T) {
 
 		if result.PublicKey != nil && len(result.PublicKey) == 0 {
 			t.Error("PublicKey is non-nil but empty")
+		}
+
+		if !result.Valid && len(result.Errors) == 0 {
+			t.Error("Valid is false but Errors is empty")
 		}
 	})
 }

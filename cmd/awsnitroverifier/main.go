@@ -158,19 +158,25 @@ func printValidationResults(result *nitroverifier.ValidationResult, verbose bool
 		fmt.Println("✅ Attestation validation PASSED")
 		fmt.Println("  🔐 Certificate chain validated")
 		fmt.Println("  🏛️ Signatures verified")
-		if result.ChainValidated {
+		if result.ChainTrusted {
 			fmt.Printf("  🔗 AWS root fingerprint: %s\n", result.RootFingerprint)
 		}
 	} else {
 		fmt.Println("❌ Attestation validation FAILED")
+		if len(result.Errors) > 0 {
+			fmt.Println("\nValidation errors:")
+			for _, errMsg := range result.Errors {
+				fmt.Printf("  - %s\n", errMsg)
+			}
+		}
 	}
 
 	// Print PCR results
-	if len(result.PCRValidations) > 0 {
+	if len(result.PCRResults) > 0 {
 		fmt.Printf("\n🔐 PCR Validations:\n")
 		validCount := 0
 		invalidCount := 0
-		for _, pcr := range result.PCRValidations {
+		for _, pcr := range result.PCRResults {
 			if pcr.Valid {
 				validCount++
 			} else {
@@ -178,9 +184,9 @@ func printValidationResults(result *nitroverifier.ValidationResult, verbose bool
 			}
 		}
 		fmt.Printf("  Total: %d | Valid: %d | Invalid: %d\n",
-			len(result.PCRValidations), validCount, invalidCount)
+			len(result.PCRResults), validCount, invalidCount)
 
-		for _, pcr := range result.PCRValidations {
+		for _, pcr := range result.PCRResults {
 			if pcr.Valid {
 				fmt.Printf("  ✅ PCR[%d]: Valid\n", pcr.Index)
 				if verbose {

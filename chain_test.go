@@ -27,8 +27,8 @@ func TestChainOfTrustValidation(t *testing.T) {
 	}
 
 	// Check chain validation was performed
-	if !result.ChainValidated {
-		t.Error("Certificate chain was not validated")
+	if !result.ChainTrusted {
+		t.Errorf("Certificate chain was not validated, errors: %v", result.Errors)
 	}
 
 	// Verify root fingerprint matches AWS Nitro root

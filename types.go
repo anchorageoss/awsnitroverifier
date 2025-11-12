@@ -13,27 +13,32 @@ type PCRRule struct {
 
 // PCRValidationResult represents the result of a single PCR validation
 type PCRValidationResult struct {
-	Index    uint
-	Expected []byte
-	Actual   []byte
-	Valid    bool
-	Error    error
+	Index    uint   // PCR index
+	Expected []byte // Expected PCR value
+	Actual   []byte // Actual PCR value from attestation
+	Valid    bool   // Whether the PCR matches expected value
 }
 
 // ValidationResult contains the result of AWS Nitro attestation validation
 type ValidationResult struct {
-	// Core validation results
-	Valid           bool   // Whether the attestation passed all validation checks
-	ChainValidated  bool   // Whether the certificate chain was validated against AWS Nitro root
-	RootFingerprint string // SHA256 fingerprint of the root certificate in the chain
+	// Overall validation status - true if all required checks passed
+	Valid bool
 
-	// Optional fields from attestation document
+	// Validation errors - empty if Valid is true
+	// Each entry describes a specific validation failure
+	Errors []string
+
+	// Certificate chain validation details
+	ChainTrusted    bool   // True if certificate chain validated to AWS Nitro root
+	RootFingerprint string // SHA256 fingerprint of the root certificate (set if ChainTrusted is true)
+
+	// Optional fields extracted from attestation document
 	UserData  []byte // Application-specific data included in the attestation
 	PublicKey []byte // Public key included in the attestation
 	Nonce     []byte // Nonce included in the attestation
 
-	// PCR validation results
-	PCRValidations []PCRValidationResult // Results of PCR validations if PCRRules were provided
+	// PCR validation results (only set if PCRRules were provided in options)
+	PCRResults []PCRValidationResult
 }
 
 // AWSNitroVerifierOptions configures the AWS Nitro verifier behavior
