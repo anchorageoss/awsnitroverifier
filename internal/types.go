@@ -78,3 +78,11 @@ type AWSNitroVerifierOptions struct {
 	CurrentTime            time.Time
 	ExpectedCertificateCNs []string
 }
+
+// FromPublicOptions converts public AWSNitroVerifierOptions to internal AWSNitroVerifierOptions
+func FromPublicOptions(opts types.AWSNitroVerifierOptions) *AWSNitroVerifierOptions {
+	return &AWSNitroVerifierOptions{
+		SkipTimestampCheck: opts.SkipTimestampCheck,
+		PCRRules:           opts.PCRRules,
+	}
+}

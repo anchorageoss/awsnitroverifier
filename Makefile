@@ -1,6 +1,9 @@
 # AWS Nitro Verifier Makefile
 # Provides commands for building, testing, and maintaining the project
 
+# Configuration
+COVERAGE_THRESHOLD := 80
+
 .PHONY: help build test test-coverage test-coverage-serve test-strict lint clean check-deps security-scan install-tools setup-hooks
 
 # Default target
@@ -58,7 +61,7 @@ test-coverage-serve: test ## Serve coverage report on HTTP server
 		exit 1; \
 	fi
 
-test-strict: ## Run tests with 80% coverage threshold check
+test-strict: ## Run tests with coverage threshold check
 	@echo "🧪 Running tests with strict coverage checking..."
 	@go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 	@echo ""
@@ -69,12 +72,12 @@ test-strict: ## Run tests with 80% coverage threshold check
 	@mv coverage.out.tmp coverage.out
 	@echo ""
 	@COVERAGE=$$(go tool cover -func=coverage.out | tail -1 | awk '{print $$3}' | sed 's/%//'); \
-	awk -v coverage="$$COVERAGE" 'BEGIN { \
-		if (coverage < 80) { \
-			print "❌ Code coverage: " coverage "% (below 80% minimum)"; \
+	awk -v coverage="$$COVERAGE" -v threshold="$(COVERAGE_THRESHOLD)" 'BEGIN { \
+		if (coverage < threshold) { \
+			print "❌ Code coverage: " coverage "% (below " threshold "% minimum)"; \
 			exit 1; \
 		}; \
-		print "✅ Code coverage: " coverage "% (meets 80% minimum)"; \
+		print "✅ Code coverage: " coverage "% (meets " threshold "% minimum)"; \
 		exit 0; \
 	}'
 

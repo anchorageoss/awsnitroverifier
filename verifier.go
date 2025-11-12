@@ -86,10 +86,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 
 			// Validate certificate chain against AWS root
 			if doc.CABundle != nil {
-				internalOpts := &internal.AWSNitroVerifierOptions{
-					SkipTimestampCheck: v.options.SkipTimestampCheck,
-					PCRRules:           v.options.PCRRules,
-				}
+				internalOpts := internal.FromPublicOptions(v.options)
 				if err := internal.VerifyCertificateChain(cert, doc.CABundle, internalOpts); err != nil {
 					validationErrors = append(validationErrors, fmt.Sprintf("certificate chain: %v", err))
 				} else {
