@@ -1,6 +1,6 @@
 //go:build !selectTest || isolatedTest
 
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"encoding/base64"

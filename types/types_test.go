@@ -37,10 +37,10 @@ func TestPCRRule(t *testing.T) {
 
 func TestPCRValidationResult(t *testing.T) {
 	tests := []struct {
-		name     string
-		result   PCRValidationResult
+		name      string
+		result    PCRValidationResult
 		wantValid bool
-		index    uint
+		index     uint
 	}{
 		{
 			name: "Valid PCR",

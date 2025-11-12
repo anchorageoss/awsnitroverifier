@@ -1,6 +1,6 @@
 //go:build !selectTest || isolatedTest
 
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"encoding/base64"
@@ -252,10 +252,10 @@ func TestValidationErrorHandling(t *testing.T) {
 	})
 
 	testCases := []struct {
-		name            string
-		input           []byte
-		shouldError     bool
-		errorContains   string
+		name          string
+		input         []byte
+		shouldError   bool
+		errorContains string
 	}{
 		{
 			name:          "ValidAttestation",

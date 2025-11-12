@@ -1,4 +1,4 @@
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"crypto/ecdsa"

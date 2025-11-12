@@ -1,6 +1,6 @@
 //go:build !selectTest || isolatedTest
 
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"crypto/rand"

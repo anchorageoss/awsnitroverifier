@@ -1,4 +1,4 @@
-package nitroverifier
+package awsnitroverifier
 
 // Re-export public types from the types package for convenience
 import "github.com/anchorageoss/awsnitroverifier/types"
