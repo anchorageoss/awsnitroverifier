@@ -11,29 +11,30 @@ import (
 	"time"
 
 	"github.com/anchorageoss/awsnitroverifier/internal"
+	"github.com/anchorageoss/awsnitroverifier/types"
 	"github.com/fxamacker/cbor/v2"
 )
 
-// verifier implements the Verifier interface
+// verifier implements the types.Verifier interface
 type verifier struct {
-	options AWSNitroVerifierOptions
+	options types.AWSNitroVerifierOptions
 }
 
 // NewVerifier creates a new attestation validator with the given options
-func NewVerifier(options AWSNitroVerifierOptions) Verifier {
+func NewVerifier(options types.AWSNitroVerifierOptions) types.Verifier {
 	return &verifier{
 		options: options,
 	}
 }
 
 // Validate performs validation on attestation document bytes
-func (v *verifier) Validate(attestationBytes []byte) (*ValidationResult, error) {
+func (v *verifier) Validate(attestationBytes []byte) (*types.ValidationResult, error) {
 	return v.validateBytes(attestationBytes)
 }
 
 // validateBytes performs validation on raw attestation document bytes
-func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, error) {
-	result := &ValidationResult{}
+func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResult, error) {
+	result := &types.ValidationResult{}
 
 	// Parse the outer COSE Sign1 structure - return error for malformed input
 	var coseSign1 interface{}
@@ -87,6 +88,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 			if doc.CABundle != nil {
 				internalOpts := &internal.AWSNitroVerifierOptions{
 					SkipTimestampCheck: v.options.SkipTimestampCheck,
+					PCRRules:           v.options.PCRRules,
 				}
 				if err := internal.VerifyCertificateChain(cert, doc.CABundle, internalOpts); err != nil {
 					validationErrors = append(validationErrors, fmt.Sprintf("certificate chain: %v", err))
@@ -111,30 +113,16 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 
 	// Validate PCRs if rules are provided
 	if len(v.options.PCRRules) > 0 {
-		// Convert public PCRRules to internal format
-		internalPCRRules := make([]internal.PCRRule, len(v.options.PCRRules))
-		for i, rule := range v.options.PCRRules {
-			internalPCRRules[i] = internal.PCRRule{
-				Index: rule.Index,
-				Value: rule.Value,
-			}
-		}
+		result.PCRResults = internal.ValidatePCRs(doc.PCRs, v.options.PCRRules)
 
-		internalResults := internal.ValidatePCRs(doc.PCRs, internalPCRRules)
-
-		// Convert internal results to public format
-		result.PCRResults = make([]PCRValidationResult, len(internalResults))
-		for i, internalResult := range internalResults {
-			result.PCRResults[i] = PCRValidationResult{
-				Index:    internalResult.Index,
-				Expected: internalResult.Expected,
-				Actual:   internalResult.Actual,
-				Valid:    internalResult.Valid,
-			}
-
-			// Check for any PCR validation failures
-			if !internalResult.Valid {
-				validationErrors = append(validationErrors, fmt.Sprintf("PCR[%d] mismatch", internalResult.Index))
+		// Check for any PCR validation failures
+		for _, pcr := range result.PCRResults {
+			if !pcr.Valid {
+				if pcr.Actual == nil {
+					validationErrors = append(validationErrors, fmt.Sprintf("PCR[%d] not found in attestation", pcr.Index))
+				} else {
+					validationErrors = append(validationErrors, fmt.Sprintf("PCR[%d] mismatch", pcr.Index))
+				}
 			}
 		}
 	}

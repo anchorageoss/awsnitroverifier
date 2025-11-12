@@ -4,6 +4,8 @@ import (
 	"crypto/x509"
 	"fmt"
 	"time"
+
+	"github.com/anchorageoss/awsnitroverifier/types"
 )
 
 // COSESign1 represents the COSE_Sign1 structure as defined in RFC 8152 Section 4.2
@@ -66,34 +68,13 @@ type CertificateInfo struct {
 	Certificate  *x509.Certificate // The parsed certificate
 }
 
-// PCRValidationResult represents the result of a single PCR validation
-// This mirrors the public API type in the nitroverifier package
-type PCRValidationResult struct {
-	Index    uint
-	Expected []byte
-	Actual   []byte
-	Valid    bool
-	Error    error
-}
-
-// PCRRule defines a validation rule for a PCR value
-// This mirrors the public API type in the nitroverifier package
-type PCRRule struct {
-	Index uint
-	Value []byte
-}
-
-// AWSNitroVerifierOptions configures the AWS Nitro verifier behavior
+// AWSNitroVerifierOptions extends shared options with internal-only fields for testing
 type AWSNitroVerifierOptions struct {
-	// SkipTimestampCheck skips certificate timestamp validation
+	// Shared options fields (duplicated to avoid embedding complexity)
 	SkipTimestampCheck bool
+	PCRRules           []types.PCRRule
 
-	// CurrentTime overrides the current time for certificate validation
-	CurrentTime time.Time
-
-	// PCRRules defines expected PCR values to validate
-	PCRRules []PCRRule
-
-	// ExpectedCertificateCNs enables certificate Common Name (CN) validation for the entire chain
+	// Internal-only fields for testing
+	CurrentTime            time.Time
 	ExpectedCertificateCNs []string
 }

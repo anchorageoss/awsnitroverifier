@@ -21,8 +21,8 @@ test: ## Run all tests with coverage
 	@echo "🧪 Running tests with race detection..."
 	@go test -v -race -coverprofile=coverage.out ./... -count=1
 	@echo ""
-	@echo "Filtering out cmd package from coverage (will be covered by integration tests)..."
-	@grep -v "/cmd/" coverage.out > coverage.filtered.out || true
+	@echo "Filtering out cmd and types packages from coverage (cmd by integration tests, types has no logic)..."
+	@grep -v "^github.com/anchorageoss/awsnitroverifier/cmd/\|^github.com/anchorageoss/awsnitroverifier/types/" coverage.out > coverage.filtered.out || true
 	@echo "mode: atomic" > coverage.out.tmp
 	@grep -v "^mode:" coverage.filtered.out >> coverage.out.tmp || true
 	@mv coverage.out.tmp coverage.out
@@ -62,8 +62,8 @@ test-strict: ## Run tests with 80% coverage threshold check
 	@echo "🧪 Running tests with strict coverage checking..."
 	@go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 	@echo ""
-	@echo "Filtering out cmd package from coverage (will be covered by integration tests)..."
-	@grep -v "/cmd/" coverage.out > coverage.filtered.out || true
+	@echo "Filtering out cmd and types packages from coverage (cmd by integration tests, types has no logic)..."
+	@grep -v "^github.com/anchorageoss/awsnitroverifier/cmd/\|^github.com/anchorageoss/awsnitroverifier/types/" coverage.out > coverage.filtered.out || true
 	@echo "mode: atomic" > coverage.out.tmp
 	@grep -v "^mode:" coverage.filtered.out >> coverage.out.tmp || true
 	@mv coverage.out.tmp coverage.out

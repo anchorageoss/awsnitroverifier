@@ -2,41 +2,32 @@ package internal
 
 import (
 	"bytes"
-	"encoding/hex"
-	"fmt"
+	"github.com/anchorageoss/awsnitroverifier/types"
 )
 
 // ValidatePCR validates a single PCR value against an expected value
-func ValidatePCR(actual []byte, expected []byte, index uint) PCRValidationResult {
-	result := PCRValidationResult{
+func ValidatePCR(actual []byte, expected []byte, index uint) types.PCRValidationResult {
+	return types.PCRValidationResult{
 		Index:    index,
 		Expected: expected,
 		Actual:   actual,
 		Valid:    bytes.Equal(actual, expected),
 	}
-
-	if !result.Valid {
-		result.Error = fmt.Errorf("PCR[%d] mismatch: expected %s, got %s",
-			index, hex.EncodeToString(expected), hex.EncodeToString(actual))
-	}
-
-	return result
 }
 
 // ValidatePCRs validates multiple PCR values against rules
 // Returns results for all validations, allowing partial success
-func ValidatePCRs(pcrs map[uint][]byte, rules []PCRRule) []PCRValidationResult {
-	results := make([]PCRValidationResult, 0, len(rules))
+func ValidatePCRs(pcrs map[uint][]byte, rules []types.PCRRule) []types.PCRValidationResult {
+	results := make([]types.PCRValidationResult, 0, len(rules))
 
 	for _, rule := range rules {
 		actual, exists := pcrs[rule.Index]
 		if !exists {
-			results = append(results, PCRValidationResult{
+			results = append(results, types.PCRValidationResult{
 				Index:    rule.Index,
 				Expected: rule.Value,
 				Actual:   nil,
 				Valid:    false,
-				Error:    fmt.Errorf("PCR[%d] not found in attestation document", rule.Index),
 			})
 			continue
 		}
@@ -57,7 +48,7 @@ type PCRValidationSummary struct {
 }
 
 // GetPCRValidationSummary analyzes validation results and returns a summary
-func GetPCRValidationSummary(results []PCRValidationResult) PCRValidationSummary {
+func GetPCRValidationSummary(results []types.PCRValidationResult) PCRValidationSummary {
 	summary := PCRValidationSummary{
 		Total: len(results),
 	}
@@ -76,8 +67,8 @@ func GetPCRValidationSummary(results []PCRValidationResult) PCRValidationSummary
 }
 
 // FilterValidPCRs returns only the valid PCR results
-func FilterValidPCRs(results []PCRValidationResult) []PCRValidationResult {
-	var valid []PCRValidationResult
+func FilterValidPCRs(results []types.PCRValidationResult) []types.PCRValidationResult {
+	var valid []types.PCRValidationResult
 	for _, result := range results {
 		if result.Valid {
 			valid = append(valid, result)
@@ -87,8 +78,8 @@ func FilterValidPCRs(results []PCRValidationResult) []PCRValidationResult {
 }
 
 // FilterInvalidPCRs returns only the invalid PCR results
-func FilterInvalidPCRs(results []PCRValidationResult) []PCRValidationResult {
-	var invalid []PCRValidationResult
+func FilterInvalidPCRs(results []types.PCRValidationResult) []types.PCRValidationResult {
+	var invalid []types.PCRValidationResult
 	for _, result := range results {
 		if !result.Valid {
 			invalid = append(invalid, result)
