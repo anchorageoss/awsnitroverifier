@@ -34,6 +34,7 @@ type AWSNitroVerifierOptions struct {
 // ValidationResult contains the result of AWS Nitro attestation validation
 type ValidationResult struct {
 	// Overall validation status - true if all required checks passed
+	// Valid is true iff all required validations passed, ie.: Errors is empty
 	Valid bool
 
 	// Validation errors - empty if Valid is true
