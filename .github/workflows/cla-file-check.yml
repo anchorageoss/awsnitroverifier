@@ -1,0 +1,68 @@
+name: cla-file-check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Add permissions for the GitHub token to write comments to pull requests
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-cla-file:
+    runs-on: ubuntu-latest
+
+    # Environment variables for easy configuration
+    env:
+      CLA_URL: "https://ironcladapp.com/public-launch/6896309b0f158de8c7450de6"
+      MAINTAINER_TAG: "@anchorageoss/maintainers"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout main branch for CLA file
+        run: |
+          git fetch origin main
+          git checkout origin/main -- .cla-signed-users || echo "CLA file not found on main branch"
+
+      - name: Check for username in .cla-signed-users
+        id: check_user
+        run: |
+          if [ ! -f .cla-signed-users ]; then
+            echo "❌ CLA file not found."
+            echo "is_signed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ ! -f .cla-signed-users ]; then
+            echo "❌ CLA file not found."
+            echo "is_signed=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif grep -v '^#' .cla-signed-users | grep -q -w "${{ github.event.pull_request.user.login }}"; then
+            echo "✅ User found in .cla-signed-users file."
+            echo "is_signed=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ User not found. Please acknowledge the CLA."
+            echo "is_signed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR if user is not signed
+        if: steps.check_user.outputs.is_signed == 'false'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "Hi @${{ github.event.pull_request.user.login }}, thank you for your contribution!
+
+          It looks like this is your first time contributing. To get this PR merged, please review our Contributor License Agreement (CLA) here: **${{ env.CLA_URL }}**
+
+          Once you have reviewed the agreement, a maintainer (${{ env.MAINTAINER_TAG }}) will need to approve your addition to our contributors list by commenting \`/approve-cla\` on this PR. Thank you!"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail the check if user is not signed
+        if: steps.check_user.outputs.is_signed == 'false'
+        run: |
+          echo "This check failed because the PR author has not signed the CLA."
+          exit 1

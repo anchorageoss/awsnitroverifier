@@ -1,0 +1,187 @@
+name: add-cla-user
+
+concurrency:
+  group: cla-batch-update
+  cancel-in-progress: false
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  add-user-to-cla-list:
+    if: github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug event
+        run: |
+          echo "Event type: ${{ github.event_name }}"
+          echo "Comment body: '${{ github.event.comment.body }}'"
+          echo "Commenter: ${{ github.event.comment.user.login }}"
+          echo "Issue number: ${{ github.event.issue.number }}"
+          echo "Is PR: ${{ github.event.issue.pull_request != null }}"
+
+      - name: Check for command early
+        id: command_check
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          # Trim whitespace and normalize the command
+          COMMENT_BODY=$(echo "$COMMENT_BODY" | xargs)
+          echo "Trimmed comment: '$COMMENT_BODY'"
+
+          if [[ "$COMMENT_BODY" == "/approve-cla" ]]; then
+            echo "Command found, proceeding..."
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Command not found, skipping workflow"
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get PR details
+        if: steps.command_check.outputs.should_proceed == 'true'
+        id: pr
+        run: |
+          PR_NUMBER="${{ github.event.issue.number }}"
+          echo "Getting PR details for #${PR_NUMBER}"
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER)
+          AUTHOR=$(echo "$PR_DATA" | jq -r .user.login)
+          echo "PR Author: $AUTHOR"
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout main branch
+        if: steps.command_check.outputs.should_proceed == 'true'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check authorization
+        if: steps.command_check.outputs.should_proceed == 'true'
+        id: check
+        run: |
+          COMMENTER="${{ github.event.comment.user.login }}"
+
+          # Simple allowlist of maintainers because Running with PAT doesn't seem safe or necessary
+          # To update this list when maintainers change:
+          # - Add or remove GitHub usernames in the AUTHORIZED_USERS array below
+          # - Keep this list in sync with the canonical maintainers list (GitHub team: @anchorageoss/maintainers)
+          # - If unsure, check the repository's MAINTAINERS file or GitHub team membership
+          AUTHORIZED_USERS=("vikstrous2" "prasanna-anchorage")
+
+          echo "Checking if user '$COMMENTER' is authorized..."
+
+          if [[ " ${AUTHORIZED_USERS[*]} " =~ " ${COMMENTER} " ]]; then
+            echo "✅ User is in the authorized list. Proceeding."
+            echo "is_maintainer=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ User is not authorized."
+            echo "is_maintainer=false" >> $GITHUB_OUTPUT
+            gh pr comment ${{ github.event.issue.number }} --body "Sorry @$COMMENTER, you are not authorized to run this command. Only maintainers can approve CLA signatures."
+          fi
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add user to CLA file
+        if: steps.command_check.outputs.should_proceed == 'true' && steps.check.outputs.is_maintainer == 'true'
+        run: |
+          AUTHOR_USERNAME="${{ steps.pr.outputs.author }}"
+          COMMENTER="${{ github.event.comment.user.login }}"
+          BATCH_BRANCH="cla-signers-batch"
+
+          echo "Adding ${AUTHOR_USERNAME} to .cla-signed-users"
+
+          # Check if file exists before attempting to grep
+          if [ ! -f .cla-signed-users ]; then
+            echo "⚠️ CLA file not found on main branch. Initializing new file."
+            echo "# Contributor License Agreement Signers" > .cla-signed-users
+          fi
+
+          # Check if user is already in the list on main branch
+          if grep -v '^#' .cla-signed-users | grep -q -w "$AUTHOR_USERNAME"; then
+            echo "User is already in the list."
+            gh pr comment ${{ github.event.issue.number }} --body "ℹ️ @${AUTHOR_USERNAME} is already in the CLA signers list."
+            exit 0
+          fi
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Check if batch branch exists, if not create it from main
+          if git ls-remote --exit-code --heads origin "$BATCH_BRANCH" > /dev/null 2>&1; then
+            echo "Batch branch exists, checking it out"
+            git fetch origin "$BATCH_BRANCH"
+            git checkout "$BATCH_BRANCH"
+          else
+            echo "Creating new batch branch"
+            git checkout -b "$BATCH_BRANCH"
+          fi
+
+          # Check if file exists on batch branch before attempting to grep
+          if [ ! -f .cla-signed-users ]; then
+            echo "⚠️ CLA file not found on batch branch. This should not happen."
+            exit 1
+          fi
+
+          # Check if user is already in the batch branch
+          if grep -v '^#' .cla-signed-users | grep -q -w "$AUTHOR_USERNAME"; then
+            echo "User is already in the batch branch."
+            gh pr comment ${{ github.event.issue.number }} --body "ℹ️ @${AUTHOR_USERNAME} is already pending approval in the CLA signers batch."
+            exit 0
+          fi
+
+          # Add user to file and sort
+          # Preserve header, sort and deduplicate only usernames
+          grep '^#' .cla-signed-users > .cla-signed-users.tmp
+          (grep -v '^#' .cla-signed-users; echo "${AUTHOR_USERNAME}") | sort -u >> .cla-signed-users.tmp
+          mv .cla-signed-users.tmp .cla-signed-users
+
+          # Commit the change to batch branch
+          git add .cla-signed-users
+          git commit -m "chore: Add @${AUTHOR_USERNAME} to CLA signers list
+
+          Approved by: @${COMMENTER}
+          Related PR: #${{ github.event.issue.number }}"
+          git push origin "$BATCH_BRANCH"
+
+          echo "✅ User added to CLA signers batch branch"
+
+          # Check if a PR already exists for the batch branch
+          EXISTING_PR=$(gh pr list --head "$BATCH_BRANCH" --base main --json number --jq '.[0].number // empty')
+          GH_PR_LIST_EXIT_CODE=$?
+          if [ "$GH_PR_LIST_EXIT_CODE" -ne 0 ]; then
+            echo "❌ Failed to list PRs for batch branch '$BATCH_BRANCH'. Aborting to avoid duplicate PR creation."
+            exit 1
+          fi
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updating existing batch PR #${EXISTING_PR}"
+            gh pr comment "$EXISTING_PR" --body "✅ Added @${AUTHOR_USERNAME} to the CLA signers batch (approved by @${COMMENTER} in PR #${{ github.event.issue.number }})"
+            gh pr comment ${{ github.event.issue.number }} --body "✅ @${AUTHOR_USERNAME} has been added to the CLA signers batch PR #${EXISTING_PR} by @${COMMENTER}. The CLA check will pass once the batch PR is merged."
+          else
+            echo "Creating new batch PR"
+            NEW_PR=$(gh pr create \
+              --title "chore: Add CLA signers batch" \
+              --body "This PR adds new CLA signers in batch to comply with repository rules.
+
+Recent additions:
+- @${AUTHOR_USERNAME} (approved by @${COMMENTER} in PR #${{ github.event.issue.number }})
+
+This PR will be updated automatically as more users are approved." \
+              --head "$BATCH_BRANCH" \
+              --base main \
+              --label "cla" \
+              | grep -o '#[0-9]\+' | head -1 | tr -d '#')
+
+            echo "Created new batch PR #${NEW_PR}"
+            gh pr comment ${{ github.event.issue.number }} --body "✅ @${AUTHOR_USERNAME} has been added to a new CLA signers batch PR #${NEW_PR} by @${COMMENTER}. The CLA check will pass once the batch PR is merged."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
