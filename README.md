@@ -1,5 +1,8 @@
 # AWS Nitro Enclave Attestation Verifier
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/anchorageoss/awsnitroverifier)](https://goreportcard.com/report/github.com/anchorageoss/awsnitroverifier)
+[![Go Reference](https://pkg.go.dev/badge/github.com/anchorageoss/awsnitroverifier.svg)](https://pkg.go.dev/github.com/anchorageoss/awsnitroverifier)
+
 A Go library for validating AWS Nitro Enclave attestation documents with complete chain of trust verification against the official AWS Nitro root certificate.
 
 ## Features
@@ -17,117 +20,67 @@ A Go library for validating AWS Nitro Enclave attestation documents with complet
 go get github.com/anchorageoss/awsnitroverifier
 ```
 
-## Usage
-
-### Basic Validation
+## Quick Start
 
 ```go
 package main
 
 import (
-    "encoding/base64"
     "fmt"
     "log"
-    
-    nitroverifier "github.com/anchorageoss/awsnitroverifier"
+
+    "github.com/anchorageoss/awsnitroverifier"
 )
 
 func main() {
-    // Load attestation (usually from AWS Nitro Enclave)
-    attestationBase64 := "..." // base64-encoded attestation
-    attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Create verifier
-    verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
-        SkipTimestampCheck: false, // Validate certificate timestamps
+    // attestationBytes from AWS Nitro Enclave
+    verifier := awsnitroverifier.NewVerifier(awsnitroverifier.AWSNitroVerifierOptions{
+        SkipTimestampCheck: false,
     })
 
-    // Validate attestation
     result, err := verifier.Validate(attestationBytes)
-    
-    // Handle malformed input
+
     if err != nil {
-        log.Fatalf("Invalid attestation: %v", err)
+        log.Fatalf("Malformed attestation: %v", err)
     }
 
-    // Handle validation failures
     if !result.Valid {
-        fmt.Printf("Validation failed:\n")
-        for _, errMsg := range result.Errors {
-            fmt.Printf("  - %s\n", errMsg)
-        }
+        fmt.Printf("Validation failed: %v\n", result.Errors)
         return
     }
 
-    // Success!
-    fmt.Println("✅ Attestation is valid")
-    if result.ChainTrusted {
-        fmt.Printf("AWS root: %s\n", result.RootFingerprint)
-    }
-    if result.UserData != nil {
-        fmt.Printf("UserData: %x\n", result.UserData)
-    }
+    fmt.Printf("✅ Attestation valid\n")
+    fmt.Printf("Root fingerprint: %s\n", result.RootFingerprint)
 }
 ```
 
-### PCR Validation
+## Usage
+
+See [USAGE.md](USAGE.md) for:
+- Basic validation
+- PCR validation
+- Data extraction
+- Offline/test mode
+- Error handling patterns
+- Migration from nitrite
+
+## Error Handling
+
+The library distinguishes between two types of errors:
 
 ```go
-verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
-    SkipTimestampCheck: true,
-    PCRRules: []nitroverifier.PCRRule{
-        {
-            Index: 3,
-            Value: []byte{...}, // Expected PCR value
-        },
-    },
-})
-
 result, err := verifier.Validate(attestationBytes)
+
+// Malformed input - parsing error
 if err != nil {
-    log.Fatal(err)
+    log.Fatalf("Input error: %v", err)
 }
 
+// Validation failure - well-formed but invalid
 if !result.Valid {
-    log.Fatal("Validation failed")
-}
-
-// Check specific PCR results
-for _, pcr := range result.PCRResults {
-    if !pcr.Valid {
-        fmt.Printf("PCR[%d] mismatch\n", pcr.Index)
-    }
+    log.Fatalf("Validation error: %v", result.Errors)
 }
 ```
-
-### Offline/Test Validation
-
-For scenarios where certificates have expired (e.g., test fixtures, offline validation):
-
-```go
-verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
-    SkipTimestampCheck: true, // Skip certificate date validation
-})
-
-result, err := verifier.Validate(attestationBytes)
-```
-
-## API
-
-### Quick Reference
-
-- **Verifier** - Interface with `Validate([]byte) (*ValidationResult, error)` method
-- **ValidationResult** - Contains validation status, errors, and extracted data
-- **AWSNitroVerifierOptions** - Configuration for timestamp and PCR validation
-
-For complete API documentation, see [pkg.go.dev](https://pkg.go.dev/github.com/anchorageoss/awsnitroverifier).
-
-### Error Handling
-
-The `Validate()` function uses Go's error handling idiomatically:
 
 **Malformed Input** (`err != nil`):
 - Cannot be parsed as CBOR
@@ -140,24 +93,16 @@ The `Validate()` function uses Go's error handling idiomatically:
 - Certificate expired (unless SkipTimestampCheck=true)
 - PCR values don't match expected values
 
-```go
-result, err := verifier.Validate(attestationBytes)
+## API Reference
 
-// Fatal error - input is invalid
-if err != nil {
-    log.Fatalf("Malformed attestation: %v", err)
-}
+- **NewVerifier()** - Create a verifier with options
+- **Validate()** - Validate attestation bytes
+- **ValidationResult** - Contains validation status and extracted data
+- **AWSNitroVerifierOptions** - Configuration for validation
 
-// Validation error - attestation is well-formed but doesn't meet requirements
-if !result.Valid {
-    fmt.Printf("Validation failed: %v\n", result.Errors)
-    return
-}
-```
+For complete API documentation: https://pkg.go.dev/github.com/anchorageoss/awsnitroverifier
 
 ## Testing
-
-The library includes test fixtures in `testdata/`:
 
 ```bash
 # Run tests
@@ -167,7 +112,7 @@ go test -v ./...
 go test -cover ./...
 ```
 
-For information about test fixtures and obtaining your own attestations, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Test fixtures are included in `testdata/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for information about obtaining your own attestations.
 
 ## Security
 
