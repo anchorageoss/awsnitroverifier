@@ -12,6 +12,18 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+// countPCRValidations returns the count of valid and invalid PCR validations
+func countPCRValidations(results []nitroverifier.PCRValidationResult) (valid, invalid int) {
+	for _, pcr := range results {
+		if pcr.Valid {
+			valid++
+		} else {
+			invalid++
+		}
+	}
+	return valid, invalid
+}
+
 func main() {
 	cmd := &cli.Command{
 		Name:  "awsnitroverifier",
@@ -174,7 +186,7 @@ func printValidationResults(result *nitroverifier.ValidationResult, verbose bool
 	// Print PCR results
 	if len(result.PCRResults) > 0 {
 		fmt.Printf("\n🔐 PCR Validations:\n")
-		validCount, invalidCount := nitroverifier.CountPCRValidations(result.PCRResults)
+		validCount, invalidCount := countPCRValidations(result.PCRResults)
 		fmt.Printf("  Total: %d | Valid: %d | Invalid: %d\n",
 			len(result.PCRResults), validCount, invalidCount)
 

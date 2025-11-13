@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/anchorageoss/awsnitroverifier/internal"
+	"github.com/stretchr/testify/require"
 )
 
 // Embed real AWS Nitro certificate chain from testdata
@@ -55,7 +55,7 @@ func TestAWSNitroRootCertificate(t *testing.T) {
 
 		// Verify it's the expected AWS Nitro root
 		fingerprint := calculateCertificateFingerprint(cert)
-		require.Equal(t, AWSNitroRootFingerprint, fingerprint)
+		require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint)
 
 		// Verify certificate properties
 		require.True(t, cert.IsCA, "AWS Nitro root should be a CA certificate")
@@ -116,7 +116,7 @@ func TestCalculateCertificateFingerprint(t *testing.T) {
 
 	fingerprint := calculateCertificateFingerprint(cert)
 	require.NotEmpty(t, fingerprint)
-	require.Equal(t, AWSNitroRootFingerprint, fingerprint)
+	require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint)
 }
 
 // ============================================================================
@@ -191,7 +191,7 @@ func createFakeTestChain(t *testing.T) ([]byte, [][]byte, *x509.Certificate) {
 
 	// SECURITY CHECK: Verify root fingerprint is NOT the real AWS Nitro fingerprint
 	testFingerprint := calculateCertificateFingerprint(rootCert)
-	require.NotEqual(t, AWSNitroRootFingerprint, testFingerprint,
+	require.NotEqual(t, internal.AWSNitroRootFingerprint, testFingerprint,
 		"SECURITY: Test root certificate fingerprint MUST NOT match real AWS Nitro root fingerprint")
 
 	// Create FAKE intermediate certificate
@@ -441,7 +441,7 @@ func TestRealAWSCertChain(t *testing.T) {
 		require.NoError(t, err, "Root certificate should be valid AWS Nitro root")
 
 		fingerprint := calculateCertificateFingerprint(rootCert)
-		require.Equal(t, AWSNitroRootFingerprint, fingerprint,
+		require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint,
 			"Root fingerprint should match expected AWS Nitro root")
 	})
 
@@ -530,7 +530,7 @@ func TestDecodePEMCertificate(t *testing.T) {
 	}{
 		{
 			name:    "valid AWS Nitro root certificate",
-			pemData: []byte(awsNitroRootPEM),
+			pemData: []byte(internal.AWSNitroRootPEM),
 			wantErr: false,
 			validate: func(t *testing.T, cert *x509.Certificate) {
 				require.NotNil(t, cert)
@@ -1036,7 +1036,7 @@ func TestSafetyCheckTestCertificatesCannotMatchRealAWS(t *testing.T) {
 	realFingerprint := calculateCertificateFingerprint(realRoot)
 	require.NotEqual(t, realFingerprint, testFingerprint,
 		"SECURITY: Test certificate fingerprint MUST differ from real AWS Nitro root")
-	require.NotEqual(t, AWSNitroRootFingerprint, testFingerprint,
+	require.NotEqual(t, internal.AWSNitroRootFingerprint, testFingerprint,
 		"SECURITY: Test certificate fingerprint MUST NOT match AWS Nitro constant")
 
 	// SECURITY: Verify subjects are different
@@ -1191,4 +1191,3 @@ func TestVerifyCertificateChainMultipleIntermediates(t *testing.T) {
 	require.Error(t, err, "FAKE test certificates MUST be rejected")
 	require.Contains(t, err.Error(), "first certificate in CA bundle is not AWS Nitro root")
 }
-

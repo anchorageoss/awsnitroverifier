@@ -68,18 +68,6 @@ type ValidationResult struct {
 	PCRResults []PCRValidationResult
 }
 
-// CountPCRValidations returns the count of valid and invalid PCR validations
-func CountPCRValidations(results []PCRValidationResult) (valid, invalid int) {
-	for _, pcr := range results {
-		if pcr.Valid {
-			valid++
-		} else {
-			invalid++
-		}
-	}
-	return valid, invalid
-}
-
 // verifier implements the Verifier interface
 type verifier struct {
 	options AWSNitroVerifierOptions
