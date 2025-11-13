@@ -11,30 +11,95 @@ import (
 	"time"
 
 	"github.com/anchorageoss/awsnitroverifier/internal"
-	"github.com/anchorageoss/awsnitroverifier/types"
 	"github.com/fxamacker/cbor/v2"
 )
 
-// verifier implements the types.Verifier interface
+// Verifier defines the interface for verifying AWS Nitro attestation documents
+type Verifier interface {
+	Validate(attestationBytes []byte) (*ValidationResult, error)
+}
+
+// PCRRule defines a validation rule for a PCR value
+type PCRRule struct {
+	Index uint
+	Value []byte
+}
+
+// PCRValidationResult represents the result of a single PCR validation
+type PCRValidationResult struct {
+	Index    uint   // PCR index
+	Expected []byte // Expected PCR value
+	Actual   []byte // Actual PCR value from attestation
+	Valid    bool   // Whether the PCR matches expected value
+}
+
+// AWSNitroVerifierOptions configures the AWS Nitro verifier behavior
+type AWSNitroVerifierOptions struct {
+	// SkipTimestampCheck skips certificate timestamp validation.
+	// Often these certificates need to be validated much later in offline systems,
+	// so skipping the timestamp check may be necessary.
+	SkipTimestampCheck bool
+
+	// PCRRules defines expected PCR values to validate.
+	// If provided, the verifier will check that the attestation's PCR values match these rules.
+	PCRRules []PCRRule
+}
+
+// ValidationResult contains the result of AWS Nitro attestation validation
+type ValidationResult struct {
+	// Overall validation status - true if all required checks passed
+	// Valid is true iff all required validations passed, ie.: Errors is empty
+	Valid bool
+
+	// Validation errors - empty if Valid is true
+	// Each entry describes a specific validation failure
+	Errors []error
+
+	// Certificate chain validation details
+	ChainTrusted    bool   // True if certificate chain validated to AWS Nitro root
+	RootFingerprint string // SHA256 fingerprint of the root certificate (set if ChainTrusted is true)
+
+	// Optional fields extracted from attestation document
+	UserData  []byte // Application-specific data included in the attestation
+	PublicKey []byte // Public key included in the attestation
+	Nonce     []byte // Nonce included in the attestation
+
+	// PCR validation results (only set if PCRRules were provided in options)
+	PCRResults []PCRValidationResult
+}
+
+// CountPCRValidations returns the count of valid and invalid PCR validations
+func CountPCRValidations(results []PCRValidationResult) (valid, invalid int) {
+	for _, pcr := range results {
+		if pcr.Valid {
+			valid++
+		} else {
+			invalid++
+		}
+	}
+	return valid, invalid
+}
+
+// verifier implements the Verifier interface
 type verifier struct {
-	options types.AWSNitroVerifierOptions
+	options AWSNitroVerifierOptions
 }
 
 // NewVerifier creates a new attestation validator with the given options
-func NewVerifier(options types.AWSNitroVerifierOptions) types.Verifier {
+func NewVerifier(options AWSNitroVerifierOptions) Verifier {
 	return &verifier{
 		options: options,
 	}
 }
 
 // Validate performs validation on attestation document bytes
-func (v *verifier) Validate(attestationBytes []byte) (*types.ValidationResult, error) {
+func (v *verifier) Validate(attestationBytes []byte) (*ValidationResult, error) {
 	return v.validateBytes(attestationBytes)
 }
 
 // validateBytes performs validation on raw attestation document bytes
-func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResult, error) {
-	result := &types.ValidationResult{}
+func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, error) {
+	result := &ValidationResult{}
 
 	// Parse the outer COSE Sign1 structure - return error for malformed input
 	var coseSign1 interface{}
@@ -54,7 +119,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 	}
 
 	// Parse the attestation document - return error for malformed input
-	doc, err := internal.ParseAttestationDocument(payload)
+	doc, err := parseAttestationDocument(payload)
 	if err != nil {
 		return nil, fmt.Errorf("malformed attestation: failed to parse document: %w", err)
 	}
@@ -76,18 +141,17 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 		} else {
 			// Validate certificate timestamp if not skipped
 			if !v.options.SkipTimestampCheck {
-				certInfo, err := internal.ExtractCertificateInfo(doc.Certificate)
+				certInfo, err := extractCertificateInfo(doc.Certificate)
 				if err != nil {
 					validationErrors = append(validationErrors, fmt.Errorf("certificate extraction: %v", err))
-				} else if err := internal.ValidateCertificateTimestamp(certInfo, time.Now()); err != nil {
+				} else if err := validateCertificateTimestamp(certInfo, time.Now()); err != nil {
 					validationErrors = append(validationErrors, fmt.Errorf("certificate expired: %v", err))
 				}
 			}
 
 			// Validate certificate chain against AWS root
 			if doc.CABundle != nil {
-				internalOpts := internal.FromPublicOptions(v.options)
-				if err := internal.VerifyCertificateChain(cert, doc.CABundle, internalOpts); err != nil {
+				if err := verifyCertificateChain(cert, doc.CABundle, &v.options); err != nil {
 					validationErrors = append(validationErrors, fmt.Errorf("certificate chain: %v", err))
 				} else {
 					result.ChainTrusted = true
@@ -95,7 +159,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 					if len(doc.CABundle) > 0 {
 						rootCert, err := x509.ParseCertificate(doc.CABundle[0])
 						if err == nil {
-							result.RootFingerprint = internal.CalculateCertificateFingerprint(rootCert)
+							result.RootFingerprint = calculateCertificateFingerprint(rootCert)
 						}
 					}
 				}
@@ -110,7 +174,8 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*types.ValidationResu
 
 	// Validate PCRs if rules are provided
 	if len(v.options.PCRRules) > 0 {
-		result.PCRResults = internal.ValidatePCRs(doc.PCRs, v.options.PCRRules)
+		// Validate PCRs
+		result.PCRResults = validatePCRs(doc.PCRs, v.options.PCRRules)
 
 		// Check for any PCR validation failures
 		for _, pcr := range result.PCRResults {

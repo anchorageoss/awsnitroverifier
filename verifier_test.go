@@ -1,5 +1,3 @@
-//go:build !selectTest || isolatedTest
-
 package awsnitroverifier
 
 import (

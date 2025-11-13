@@ -1,6 +1,4 @@
-//go:build !selectTest || isolatedTest
-
-package internal
+package awsnitroverifier
 
 import (
 	_ "embed"
@@ -9,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +30,7 @@ func loadNitroAttestationPayload(t *testing.T) []byte {
 	rawAttestation, err := base64.StdEncoding.DecodeString(awsNitroAttestationBase64)
 	require.NoError(t, err, "failed to decode base64")
 
-	coseSign1, err := ParseCOSESign1(rawAttestation)
+	coseSign1, err := parseCOSESign1(rawAttestation)
 	require.NoError(t, err, "failed to parse COSE_Sign1")
 
 	return coseSign1.Payload
@@ -49,7 +48,7 @@ func loadFirstCertFromPEM(t *testing.T, pemData []byte) []byte {
 }
 
 // ============================================================================
-// Tests: ParseCOSESign1
+// Tests: parseCOSESign1
 // ============================================================================
 
 func TestParseCOSESign1(t *testing.T) {
@@ -61,13 +60,13 @@ func TestParseCOSESign1(t *testing.T) {
 		data        []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, cose *COSESign1)
+		validate    func(t *testing.T, cose *internal.COSESign1)
 	}{
 		{
 			name:    "valid AWS Nitro COSE_Sign1",
 			data:    rawAttestation,
 			wantErr: false,
-			validate: func(t *testing.T, cose *COSESign1) {
+			validate: func(t *testing.T, cose *internal.COSESign1) {
 				require.NotNil(t, cose.ProtectedHeaders)
 				require.NotNil(t, cose.Payload)
 				require.NotNil(t, cose.Signature)
@@ -128,7 +127,7 @@ func TestParseCOSESign1(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cose, err := ParseCOSESign1(tt.data)
+			cose, err := parseCOSESign1(tt.data)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -165,13 +164,13 @@ func TestParseAttestationDocument(t *testing.T) {
 		data        []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, doc *AttestationDocument)
+		validate    func(t *testing.T, doc *internal.AttestationDocument)
 	}{
 		{
 			name:    "valid AWS Nitro attestation document",
 			data:    validPayload,
 			wantErr: false,
-			validate: func(t *testing.T, doc *AttestationDocument) {
+			validate: func(t *testing.T, doc *internal.AttestationDocument) {
 				require.NotEmpty(t, doc.ModuleID)
 				require.NotZero(t, doc.Timestamp)
 				require.NotEmpty(t, doc.Certificate)
@@ -261,7 +260,7 @@ func TestParseAttestationDocument(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc, err := ParseAttestationDocument(tt.data)
+			doc, err := parseAttestationDocument(tt.data)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -292,13 +291,13 @@ func TestExtractCertificateInfo(t *testing.T) {
 		certDER     []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, info *CertificateInfo)
+		validate    func(t *testing.T, info *internal.CertificateInfo)
 	}{
 		{
 			name:    "valid certificate from AWS Nitro chain",
 			certDER: validCertDER,
 			wantErr: false,
-			validate: func(t *testing.T, info *CertificateInfo) {
+			validate: func(t *testing.T, info *internal.CertificateInfo) {
 				require.NotZero(t, info.NotBefore)
 				require.NotZero(t, info.NotAfter)
 				require.NotEmpty(t, info.Subject)
@@ -330,7 +329,7 @@ func TestExtractCertificateInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info, err := ExtractCertificateInfo(tt.certDER)
+			info, err := extractCertificateInfo(tt.certDER)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -354,14 +353,14 @@ func TestExtractCertificateInfo(t *testing.T) {
 // ============================================================================
 
 func TestValidateCertificateTimestamp(t *testing.T) {
-	validCert := &CertificateInfo{
+	validCert := &internal.CertificateInfo{
 		NotBefore: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		NotAfter:  time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC),
 	}
 
 	tests := []struct {
 		name        string
-		certInfo    *CertificateInfo
+		certInfo    *internal.CertificateInfo
 		checkTime   time.Time
 		wantErr     bool
 		errContains string
@@ -416,7 +415,7 @@ func TestValidateCertificateTimestamp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateCertificateTimestamp(tt.certInfo, tt.checkTime)
+			err := validateCertificateTimestamp(tt.certInfo, tt.checkTime)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -436,7 +435,7 @@ func TestValidateCertificateTimestamp(t *testing.T) {
 // ============================================================================
 
 func TestAttestationDocumentValidate(t *testing.T) {
-	validDoc := &AttestationDocument{
+	validDoc := &internal.AttestationDocument{
 		ModuleID:    "test-module",
 		Timestamp:   1234567890,
 		Certificate: []byte("cert"),
@@ -445,7 +444,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		doc         *AttestationDocument
+		doc         *internal.AttestationDocument
 		wantErr     bool
 		errContains string
 	}{
@@ -456,7 +455,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing module_id",
-			doc: &AttestationDocument{
+			doc: &internal.AttestationDocument{
 				Timestamp:   1234567890,
 				Certificate: []byte("cert"),
 				CABundle:    [][]byte{[]byte("ca")},
@@ -466,7 +465,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing timestamp",
-			doc: &AttestationDocument{
+			doc: &internal.AttestationDocument{
 				ModuleID:    "test-module",
 				Certificate: []byte("cert"),
 				CABundle:    [][]byte{[]byte("ca")},
@@ -476,7 +475,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing certificate",
-			doc: &AttestationDocument{
+			doc: &internal.AttestationDocument{
 				ModuleID:  "test-module",
 				Timestamp: 1234567890,
 				CABundle:  [][]byte{[]byte("ca")},
@@ -486,7 +485,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing cabundle",
-			doc: &AttestationDocument{
+			doc: &internal.AttestationDocument{
 				ModuleID:    "test-module",
 				Timestamp:   1234567890,
 				Certificate: []byte("cert"),

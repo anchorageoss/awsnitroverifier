@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	nitroverifier "github.com/anchorageoss/awsnitroverifier"
-	"github.com/anchorageoss/awsnitroverifier/types"
 	"github.com/urfave/cli/v3"
 )
 
@@ -175,7 +174,7 @@ func printValidationResults(result *nitroverifier.ValidationResult, verbose bool
 	// Print PCR results
 	if len(result.PCRResults) > 0 {
 		fmt.Printf("\n🔐 PCR Validations:\n")
-		validCount, invalidCount := types.CountPCRValidations(result.PCRResults)
+		validCount, invalidCount := nitroverifier.CountPCRValidations(result.PCRResults)
 		fmt.Printf("  Total: %d | Valid: %d | Invalid: %d\n",
 			len(result.PCRResults), validCount, invalidCount)
 

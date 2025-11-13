@@ -4,8 +4,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"time"
-
-	"github.com/anchorageoss/awsnitroverifier/types"
 )
 
 // COSESign1 represents the COSE_Sign1 structure as defined in RFC 8152 Section 4.2
@@ -66,23 +64,4 @@ type CertificateInfo struct {
 	Issuer       string
 	SerialNumber string
 	Certificate  *x509.Certificate // The parsed certificate
-}
-
-// AWSNitroVerifierOptions extends shared options with internal-only fields for testing
-type AWSNitroVerifierOptions struct {
-	// Shared options fields (duplicated to avoid embedding complexity)
-	SkipTimestampCheck bool
-	PCRRules           []types.PCRRule
-
-	// Internal-only fields for testing
-	CurrentTime            time.Time
-	ExpectedCertificateCNs []string
-}
-
-// FromPublicOptions converts public AWSNitroVerifierOptions to internal AWSNitroVerifierOptions
-func FromPublicOptions(opts types.AWSNitroVerifierOptions) *AWSNitroVerifierOptions {
-	return &AWSNitroVerifierOptions{
-		SkipTimestampCheck: opts.SkipTimestampCheck,
-		PCRRules:           opts.PCRRules,
-	}
 }
