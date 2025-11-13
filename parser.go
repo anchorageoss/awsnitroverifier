@@ -49,7 +49,7 @@ func parseCOSESign1(data []byte) (*coseSign1, error) {
 }
 
 // parseAttestationDocument parses the raw CBOR attestation document
-func parseAttestationDocument(data []byte) (*attestationDocument, error) {
+func parseAttestationDocument(data []byte) (*AttestationDocument, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("attestation document data is empty")
 	}
@@ -57,7 +57,7 @@ func parseAttestationDocument(data []byte) (*attestationDocument, error) {
 		return nil, fmt.Errorf("attestation document data exceeds maximum size")
 	}
 
-	var doc attestationDocument
+	var doc AttestationDocument
 
 	// Configure CBOR decoder with security limits to prevent resource exhaustion attacks:
 	// - MaxNestedLevels: 32 is sufficient for legitimate attestation documents

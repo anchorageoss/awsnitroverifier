@@ -65,6 +65,9 @@ type ValidationResult struct {
 
 	// PCR validation results (only set if PCRRules were provided in options)
 	PCRResults []PCRValidationResult
+
+	// Document is added for debugging purposes and for services that may need to inspect it further
+	Document *AttestationDocument
 }
 
 // verifier implements the Verifier interface
@@ -184,7 +187,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 }
 
 // verifySignature verifies the COSE Sign1 signature
-func (v *verifier) verifySignature(attestationBytes []byte, doc *attestationDocument) error {
+func (v *verifier) verifySignature(attestationBytes []byte, doc *AttestationDocument) error {
 	// Parse the certificate
 	cert, err := x509.ParseCertificate(doc.Certificate)
 	if err != nil {

@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-
-
 // coseSign1 represents the COSE_Sign1 structure as defined in RFC 8152 Section 4.2
 // (https://datatracker.ietf.org/doc/html/rfc8152#section-4.2)
 //
@@ -28,8 +26,8 @@ type coseSign1 struct {
 	Signature          []byte
 }
 
-// attestationDocument represents a parsed AWS Nitro attestation document
-type attestationDocument struct {
+// AttestationDocument represents a parsed AWS Nitro attestation document
+type AttestationDocument struct {
 	ModuleID    string          `cbor:"module_id"`
 	Timestamp   uint64          `cbor:"timestamp"`
 	Digest      string          `cbor:"digest"`
@@ -42,7 +40,7 @@ type attestationDocument struct {
 }
 
 // Validate checks for the presence of required fields in the attestation document
-func (a *attestationDocument) Validate() error {
+func (a *AttestationDocument) Validate() error {
 	if a.ModuleID == "" {
 		return fmt.Errorf("attestation document missing required field: module_id")
 	}
