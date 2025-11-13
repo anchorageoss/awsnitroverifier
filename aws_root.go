@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
-// Use this command to get this value
-// curl -L https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip -o temp.zip && unzip -p temp.zip root.pem > root.pem && rm temp.zip
 // AWS Nitro Enclaves Root Certificate
+//
+// Note: To obtain this certificate, use the following command:
+// curl -L https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip -o temp.zip && unzip -p temp.zip root.pem > root.pem && rm temp.zip
 const awsNitroRootPEM = `-----BEGIN CERTIFICATE-----
 MIICETCCAZagAwIBAgIRAPkxdWgbkK/hHUbMtOTn+FYwCgYIKoZIzj0EAwMwSTEL
 MAkGA1UEBhMCVVMxDzANBgNVBAoMBkFtYXpvbjEMMAoGA1UECwwDQVdTMRswGQYD
@@ -28,7 +29,6 @@ IwLz3/Y=
 
 // awsNitroRootFingerprint is the expected SHA-256 fingerprint of the AWS Nitro root certificate
 // From https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html
-// Expected AWS Nitro root certificate fingerprint (SHA-256)
 const awsNitroRootFingerprint = "641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b"
 
 // embeddedAWSNitroRootCertificate returns the parsed AWS Nitro root certificate from embedded PEM data.
