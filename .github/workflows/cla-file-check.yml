@@ -38,7 +38,11 @@ jobs:
             exit 0
           fi
 
-          if grep -v '^#' .cla-signed-users | grep -q -w "${{ github.event.pull_request.user.login }}"; then
+          if [ ! -f .cla-signed-users ]; then
+            echo "❌ CLA file not found."
+            echo "is_signed=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif grep -v '^#' .cla-signed-users | grep -q -w "${{ github.event.pull_request.user.login }}"; then
             echo "✅ User found in .cla-signed-users file."
             echo "is_signed=true" >> $GITHUB_OUTPUT
           else
