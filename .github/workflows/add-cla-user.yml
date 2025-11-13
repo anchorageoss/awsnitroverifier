@@ -171,10 +171,10 @@ jobs:
               --title "chore: Add CLA signers batch" \
               --body "This PR adds new CLA signers in batch to comply with repository rules.
 
-            Recent additions:
-            - @${AUTHOR_USERNAME} (approved by @${COMMENTER} in PR #${{ github.event.issue.number }})
+Recent additions:
+- @${AUTHOR_USERNAME} (approved by @${COMMENTER} in PR #${{ github.event.issue.number }})
 
-            This PR will be updated automatically as more users are approved." \
+This PR will be updated automatically as more users are approved." \
               --head "$BATCH_BRANCH" \
               --base main \
               --label "cla" \
