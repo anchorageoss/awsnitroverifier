@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
-
-	"github.com/anchorageoss/awsnitroverifier/internal"
 )
 
 // Note: Attestation fixtures are embedded and managed in the root package test_helpers.go
@@ -127,9 +125,9 @@ func TestAWSNitroFixtures(t *testing.T) {
 			}
 
 			// Verify root fingerprint matches AWS Nitro root using built-in constant
-			if result.RootFingerprint != internal.AWSNitroRootFingerprint {
+			if result.RootFingerprint != awsNitroRootFingerprint {
 				t.Errorf("Root fingerprint mismatch for %s: expected %s, got %s",
-					tc.description, internal.AWSNitroRootFingerprint, result.RootFingerprint)
+					tc.description, awsNitroRootFingerprint, result.RootFingerprint)
 			} else {
 				t.Logf("✓ Root fingerprint verified for %s: %s", tc.description, result.RootFingerprint)
 			}

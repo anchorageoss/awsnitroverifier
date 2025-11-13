@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"testing"
-
-	"github.com/anchorageoss/awsnitroverifier/internal"
 )
 
 // AWS Nitro attestation documents from Veracruz project
@@ -42,9 +40,9 @@ func TestChainOfTrustValidation(t *testing.T) {
 	}
 
 	// Verify root fingerprint matches AWS Nitro root using built-in constant
-	if result.RootFingerprint != internal.AWSNitroRootFingerprint {
+	if result.RootFingerprint != awsNitroRootFingerprint {
 		t.Errorf("Root fingerprint mismatch: expected %s, got %s",
-			internal.AWSNitroRootFingerprint, result.RootFingerprint)
+			awsNitroRootFingerprint, result.RootFingerprint)
 	} else {
 		t.Logf("✓ Root fingerprint verified: %s", result.RootFingerprint)
 	}

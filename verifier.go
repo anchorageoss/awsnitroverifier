@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -185,7 +184,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 }
 
 // verifySignature verifies the COSE Sign1 signature
-func (v *verifier) verifySignature(attestationBytes []byte, doc *internal.AttestationDocument) error {
+func (v *verifier) verifySignature(attestationBytes []byte, doc *attestationDocument) error {
 	// Parse the certificate
 	cert, err := x509.ParseCertificate(doc.Certificate)
 	if err != nil {

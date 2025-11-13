@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/fxamacker/cbor/v2"
 )
 
 // parseCOSESign1 parses the COSE_Sign1 wrapper structure as defined in RFC 8152.
 // See https://datatracker.ietf.org/doc/html/rfc8152#section-4.2
-func parseCOSESign1(data []byte) (*internal.COSESign1, error) {
+func parseCOSESign1(data []byte) (*coseSign1, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("COSE_Sign1 data is empty")
 	}
@@ -41,7 +40,7 @@ func parseCOSESign1(data []byte) (*internal.COSESign1, error) {
 		return nil, fmt.Errorf("invalid signature type")
 	}
 
-	return &internal.COSESign1{
+	return &coseSign1{
 		ProtectedHeaders:   protectedHeaders,
 		UnprotectedHeaders: coseArray[1],
 		Payload:            payload,
@@ -50,7 +49,7 @@ func parseCOSESign1(data []byte) (*internal.COSESign1, error) {
 }
 
 // parseAttestationDocument parses the raw CBOR attestation document
-func parseAttestationDocument(data []byte) (*internal.AttestationDocument, error) {
+func parseAttestationDocument(data []byte) (*attestationDocument, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("attestation document data is empty")
 	}
@@ -58,7 +57,7 @@ func parseAttestationDocument(data []byte) (*internal.AttestationDocument, error
 		return nil, fmt.Errorf("attestation document data exceeds maximum size")
 	}
 
-	var doc internal.AttestationDocument
+	var doc attestationDocument
 
 	// Configure CBOR decoder with security limits to prevent resource exhaustion attacks:
 	// - MaxNestedLevels: 32 is sufficient for legitimate attestation documents
@@ -85,7 +84,7 @@ func parseAttestationDocument(data []byte) (*internal.AttestationDocument, error
 }
 
 // extractCertificateInfo parses a DER-encoded certificate and extracts key information
-func extractCertificateInfo(certDER []byte) (*internal.CertificateInfo, error) {
+func extractCertificateInfo(certDER []byte) (*certificateInfo, error) {
 	if len(certDER) == 0 {
 		return nil, fmt.Errorf("certificate data is empty")
 	}
@@ -98,7 +97,7 @@ func extractCertificateInfo(certDER []byte) (*internal.CertificateInfo, error) {
 		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
-	return &internal.CertificateInfo{
+	return &certificateInfo{
 		NotBefore:    cert.NotBefore,
 		NotAfter:     cert.NotAfter,
 		Subject:      cert.Subject.String(),
@@ -109,7 +108,7 @@ func extractCertificateInfo(certDER []byte) (*internal.CertificateInfo, error) {
 }
 
 // validateCertificateTimestamp checks if a certificate is valid at the given time
-func validateCertificateTimestamp(certInfo *internal.CertificateInfo, checkTime time.Time) error {
+func validateCertificateTimestamp(certInfo *certificateInfo, checkTime time.Time) error {
 	if certInfo == nil {
 		return fmt.Errorf("certificate info is nil")
 	}
