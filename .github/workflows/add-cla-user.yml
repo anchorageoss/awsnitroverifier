@@ -134,7 +134,9 @@ jobs:
           fi
 
           # Add user to file and sort
-          (cat .cla-signed-users; echo "${AUTHOR_USERNAME}") | sort -u > .cla-signed-users.tmp
+          # Preserve header, sort and deduplicate only usernames
+          grep '^#' .cla-signed-users > .cla-signed-users.tmp
+          (grep -v '^#' .cla-signed-users; echo "${AUTHOR_USERNAME}") | sort -u >> .cla-signed-users.tmp
           mv .cla-signed-users.tmp .cla-signed-users
 
           # Commit the change to batch branch
