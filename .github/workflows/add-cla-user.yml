@@ -151,6 +151,10 @@ jobs:
 
           # Check if a PR already exists for the batch branch
           EXISTING_PR=$(gh pr list --head "$BATCH_BRANCH" --base main --json number --jq '.[0].number // empty')
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to list PRs for batch branch '$BATCH_BRANCH'. Aborting to avoid duplicate PR creation."
+            exit 1
+          fi
 
           if [ -n "$EXISTING_PR" ]; then
             echo "Updating existing batch PR #${EXISTING_PR}"
