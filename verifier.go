@@ -183,6 +183,8 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 	result.Errors = validationErrors
 	result.Valid = len(validationErrors) == 0
 
+	// ensure document is included in result for debugging
+	result.Document = doc
 	return result, nil
 }
 

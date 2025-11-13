@@ -113,6 +113,7 @@ func TestValidationResultFields(t *testing.T) {
 			PublicKey       []byte
 			Nonce           []byte
 			PCRResults      []PCRValidationResult
+			Document        *AttestationDocument
 		}{
 			Valid:           result.Valid,
 			Errors:          result.Errors,
@@ -122,6 +123,7 @@ func TestValidationResultFields(t *testing.T) {
 			PublicKey:       result.PublicKey,
 			Nonce:           result.Nonce,
 			PCRResults:      result.PCRResults,
+			Document:        result.Document,
 		}
 
 		_ = apiFields // Suppress unused variable warning
@@ -145,6 +147,10 @@ func TestValidationResultFields(t *testing.T) {
 		if !result.Valid {
 			require.NotEmpty(t, result.Errors, "Valid is false but Errors is empty")
 		}
+
+		// Document should always be populated on successful validation
+		require.NotNil(t, result.Document, "Document should be populated after validation")
+		require.NotEmpty(t, result.Document.ModuleID, "Document ModuleID should not be empty")
 	})
 }
 
