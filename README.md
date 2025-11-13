@@ -1,44 +1,74 @@
 # AWS Nitro Enclave Attestation Verifier
 
-A comprehensive Go library for validating AWS Nitro Enclave attestation documents with embedded test fixtures and complete chain of trust verification. This library provides robust verification capabilities for any AWS Nitro Enclave deployment.
+A Go library for validating AWS Nitro Enclave attestation documents with complete chain of trust verification against the official AWS Nitro root certificate.
 
 ## Features
 
-- **Complete AWS Chain of Trust**: Validates against official AWS Nitro root certificate
-- **Configurable Timestamp Validation**: Skip or customize certificate timestamp validation
-- **PCR Validation**: Validate specific PCR values with detailed debugging support
-- **UserData Extraction**: Access UserData and optional fields for application-specific verification
-- **Embedded Test Fixtures**: Built-in example attestations for testing
-- **Partial Validation Support**: Continue validation even if some checks fail
-- **Generic AWS Nitro Support**: Works with any AWS Nitro Enclave deployment
+- ✅ **AWS Chain of Trust Verification** - Validates against official AWS Nitro root certificate
+- ✅ **Flexible Certificate Validation** - Skip timestamp checks for offline/test scenarios
+- ✅ **PCR Validation** - Validate specific PCR values against expected values
+- ✅ **Data Extraction** - Access UserData, PublicKey, and Nonce from attestation
+- ✅ **Clear Error Handling** - Distinguish between malformed input and validation failures
+- ✅ **Test Fixtures** - Embedded example attestations for testing
 
 ## Installation
 
-```go
-import "github.com/anchorageoss/awsnitroverifier"
+```bash
+go get github.com/anchorageoss/awsnitroverifier
 ```
 
-## Quick Start
+## Usage
 
-### Basic Validation with Chain of Trust
+### Basic Validation
 
 ```go
-verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
-    SkipTimestampCheck: true, // For expired test certificates
-})
+package main
 
-result, err := verifier.Validate(attestationBase64)
+import (
+    "encoding/base64"
+    "fmt"
+    "log"
+    
+    nitroverifier "github.com/anchorageoss/awsnitroverifier"
+)
 
-if result.Valid && result.ChainValidated {
-    fmt.Printf("✅ Valid attestation from AWS Nitro hardware\n")
-    fmt.Printf("Root fingerprint: %s\n", result.RootFingerprint)
+func main() {
+    // Load attestation (usually from AWS Nitro Enclave)
+    attestationBase64 := "..." // base64-encoded attestation
+    attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-    // Access optional application data
+    // Create verifier
+    verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
+        SkipTimestampCheck: false, // Validate certificate timestamps
+    })
+
+    // Validate attestation
+    result, err := verifier.Validate(attestationBytes)
+    
+    // Handle malformed input
+    if err != nil {
+        log.Fatalf("Invalid attestation: %v", err)
+    }
+
+    // Handle validation failures
+    if !result.Valid {
+        fmt.Printf("Validation failed:\n")
+        for _, errMsg := range result.Errors {
+            fmt.Printf("  - %s\n", errMsg)
+        }
+        return
+    }
+
+    // Success!
+    fmt.Println("✅ Attestation is valid")
+    if result.ChainTrusted {
+        fmt.Printf("AWS root: %s\n", result.RootFingerprint)
+    }
     if result.UserData != nil {
         fmt.Printf("UserData: %x\n", result.UserData)
-    }
-    if result.PublicKey != nil {
-        fmt.Printf("PublicKey: %d bytes\n", len(result.PublicKey))
     }
 }
 ```
@@ -46,207 +76,112 @@ if result.Valid && result.ChainValidated {
 ### PCR Validation
 
 ```go
-// Define expected PCR values for your specific enclave
-expectedPCR3 := "your_expected_pcr3_value_here"
-pcr3Bytes, _ := hex.DecodeString(expectedPCR3)
-
 verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
     SkipTimestampCheck: true,
     PCRRules: []nitroverifier.PCRRule{
-        {Index: 3, Value: pcr3Bytes},
+        {
+            Index: 3,
+            Value: []byte{...}, // Expected PCR value
+        },
     },
 })
 
-result, _ := verifier.Validate(attestationBase64)
-```
+result, err := verifier.Validate(attestationBytes)
+if err != nil {
+    log.Fatal(err)
+}
 
-### Using Test Fixtures
+if !result.Valid {
+    log.Fatal("Validation failed")
+}
 
-The library includes embedded test fixtures for development and testing:
-
-```go
-// For generic AWS Nitro testing (placeholder)
-attestation := getAWSExampleAttestation() // Returns placeholder
-
-// For Turnkey-specific testing (real attestations)
-attestation := getTurnkeyProductionAttestation() // Real Turnkey attestation
-```
-
-## Validation Options
-
-```go
-type AWSNitroVerifierOptions struct {
-    // Skip certificate timestamp validation
-    SkipTimestampCheck bool
-
-    // Override validation time (zero value uses time.Now())
-    CurrentTime time.Time
-
-    // Expected PCR values
-    PCRRules []PCRRule
-
-    // Expected certificate Common Names for chain validation
-    // Use empty strings to skip validation at specific positions
-    ExpectedCertificateCNs []string
+// Check specific PCR results
+for _, pcr := range result.PCRResults {
+    if !pcr.Valid {
+        fmt.Printf("PCR[%d] mismatch\n", pcr.Index)
+    }
 }
 ```
 
-## Validation Results
+### Offline/Test Validation
+
+For scenarios where certificates have expired (e.g., test fixtures, offline validation):
 
 ```go
-type ValidationResult struct {
-    Valid              bool                    // Overall validation status
-    Document           *AttestationDocument    // Parsed attestation
-    CertificateInfo    *CertificateInfo       // Certificate details
-    CertificateChain   []CertificateInfo      // Full certificate chain
-    ChainValidated     bool                   // Chain of trust validated
-    RootFingerprint    string                 // AWS root certificate fingerprint
-    PCRValidations     []PCRValidationResult  // Individual PCR results
-    Errors             []error                // Validation errors
+verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
+    SkipTimestampCheck: true, // Skip certificate date validation
+})
 
-    // Optional attestation fields
-    UserData  []byte  // Application-specific data
-    PublicKey []byte  // Public key from enclave
-    Nonce     []byte  // Optional nonce
+result, err := verifier.Validate(attestationBytes)
+```
+
+## API
+
+### Quick Reference
+
+- **Verifier** - Interface with `Validate([]byte) (*ValidationResult, error)` method
+- **ValidationResult** - Contains validation status, errors, and extracted data
+- **AWSNitroVerifierOptions** - Configuration for timestamp and PCR validation
+
+For complete API documentation, see [pkg.go.dev](https://pkg.go.dev/github.com/anchorageoss/awsnitroverifier).
+
+### Error Handling
+
+The `Validate()` function uses Go's error handling idiomatically:
+
+**Malformed Input** (`err != nil`):
+- Cannot be parsed as CBOR
+- Invalid COSE Sign1 structure
+- Malformed attestation document
+
+**Validation Failures** (`Valid=false`):
+- Certificate chain validation fails
+- Signature verification fails
+- Certificate expired (unless SkipTimestampCheck=true)
+- PCR values don't match expected values
+
+```go
+result, err := verifier.Validate(attestationBytes)
+
+// Fatal error - input is invalid
+if err != nil {
+    log.Fatalf("Malformed attestation: %v", err)
 }
-```
 
-## AWS Nitro Root Certificate
-
-The library validates against the official AWS Nitro root certificate from AWS documentation:
-- **Fingerprint**: `641a0321a3e244efe456463195d606317ed7cdcc3c1756e09893f3c68f79bb5b`
-- **Subject**: `CN=aws.nitro-enclaves,OU=AWS,O=Amazon,C=US`
-
-## Obtaining Attestation Documents
-
-### For Generic AWS Nitro Enclaves
-
-To obtain attestation documents from your AWS Nitro Enclave:
-
-1. From within your enclave, call the Nitro Secure Module
-2. The attestation document will contain your specific PCR values and optional data
-
-Example (Python):
-```python
-import subprocess
-import base64
-
-# Get attestation with optional user data and nonce
-# This is application-specific - modify for your enclave setup
-result = subprocess.run([
-    '/usr/bin/nitro-cli', 'describe-eif',
-    '--eif-path', '/app/enclave.eif'
-], capture_output=True, text=True)
-
-# Process and encode the attestation document
-attestation = base64.b64encode(attestation_bytes).decode('utf-8')
-```
-
-For more information, see:
-- [AWS Nitro Enclaves Concepts](https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-concepts.html)
-- [Verify Root Certificate](https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html)
-
-### Example: Turnkey Integration
-
-This library works well with Turnkey's AWS Nitro Enclave integration. For Turnkey-specific attestations:
-
-```bash
-# Production attestation
-turnkey request \
-  --host api.turnkey.com \
-  --path /public/v1/query/get_attestation \
-  --body '{"organizationId": "<yourOrgId>","enclaveType": "signer"}' \
-  --organization=<yourOrgId> | jq -r '.attestationDocument' > turnkey-attestation.base64
-
-# Pre-production attestation  
-turnkey request \
-  --host api.preprod.turnkey.engineering \
-  --path /public/v1/query/get_attestation \
-  --body '{"organizationId": "<yourOrgId>","enclaveType": "signer"}' \
-  --organization=<yourOrgId> | jq -r '.attestationDocument' > turnkey-preprod-attestation.base64
+// Validation error - attestation is well-formed but doesn't meet requirements
+if !result.Valid {
+    fmt.Printf("Validation failed: %v\n", result.Errors)
+    return
+}
 ```
 
 ## Testing
 
-The library includes comprehensive tests:
+The library includes test fixtures in `testdata/`:
 
 ```bash
-go test -v
+# Run tests
+go test -v ./...
+
+# Run with coverage
+go test -cover ./...
 ```
 
-Test coverage includes:
-- AWS specification compliance
-- Chain of trust validation  
-- PCR validation with real fixtures
-- UserData extraction and validation
-- Multiple environment support
+For information about test fixtures and obtaining your own attestations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Example: Complete Attestation Validation
+## Security
 
-```go
-func validateAttestation(attestationBase64 string, expectedPCRs map[uint]string) error {
-    // Convert expected PCR strings to bytes
-    var pcrRules []nitroverifier.PCRRule
-    for index, pcrHex := range expectedPCRs {
-        pcrBytes, err := hex.DecodeString(pcrHex)
-        if err != nil {
-            return fmt.Errorf("invalid PCR[%d]: %w", index, err)
-        }
-        pcrRules = append(pcrRules, nitroverifier.PCRRule{
-            Index: index,
-            Value: pcrBytes,
-        })
-    }
+This library validates AWS Nitro attestations using:
+- ECDSA signature verification (only algorithm supported by AWS Nitro)
+- X.509 certificate chain validation
+- AWS Nitro root certificate fingerprint verification
 
-    verifier := nitroverifier.NewVerifier(nitroverifier.AWSNitroVerifierOptions{
-        SkipTimestampCheck: true, // Adjust based on your needs
-        PCRRules:          pcrRules,
-    })
+## References
 
-    result, err := verifier.Validate(attestationBase64)
-    if err != nil {
-        return fmt.Errorf("validation failed: %w", err)
-    }
+- [AWS Nitro Enclaves Documentation](https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-concepts.html)
+- [AWS Nitro Root Certificate Verification](https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html)
+- [COSE Sign1 Specification (RFC 8152)](https://tools.ietf.org/html/rfc8152)
 
-    if !result.Valid {
-        return fmt.Errorf("attestation invalid: %v", result.Errors)
-    }
+## License
 
-    if !result.ChainValidated {
-        return fmt.Errorf("certificate chain not validated")
-    }
-
-    fmt.Printf("✅ Valid AWS Nitro attestation\n")
-    if result.UserData != nil {
-        fmt.Printf("   UserData: %x\n", result.UserData)
-    }
-    if result.PublicKey != nil {
-        fmt.Printf("   PublicKey: %d bytes\n", len(result.PublicKey))
-    }
-    fmt.Printf("   Root: %s\n", result.RootFingerprint)
-
-    return nil
-}
-```
-
-## PCR Debugging
-
-```go
-result, _ := verifier.Validate(attestationBase64)
-
-summary := nitroverifier.GetPCRValidationSummary(result.PCRValidations)
-fmt.Printf("PCR Summary: %d valid, %d invalid, %d missing\n",
-    summary.Valid, summary.Invalid, summary.Missing)
-
-for _, pcr := range result.PCRValidations {
-    if !pcr.Valid {
-        fmt.Printf("❌ PCR[%d] mismatch:\n", pcr.Index)
-        fmt.Printf("   Expected: %x\n", pcr.Expected)
-        fmt.Printf("   Actual:   %x\n", pcr.Actual)
-    }
-}
-```
-
----
-
-**Note**: The embedded fixtures may contain expired certificates and should be used for testing with `SkipTimestampCheck: true` if needed.
+Apache License 2.0 - See [LICENSE](LICENSE) file for details

@@ -7,6 +7,7 @@
 # - PCRs: Platform Configuration Registers with measured boot values
 # - Certificate: X.509 certificate for signature verification
 # - CABundle: Certificate chain to AWS Nitro root
+# - Timestamp: When the attestation was generated
 # - Optional: UserData, PublicKey, Nonce for application-specific data
 
 # To generate a real attestation document:
@@ -22,5 +23,6 @@
 # PCR[4]: Boot loader measurement
 # PCR[8]: Certificate of the Attestation Public Key
 
-# For actual testing, replace this file with a real base64-encoded attestation
+# For actual testing, add a new file as base64 and update the fixture tests for existing ones
+# Add your fixture and use embed and update the test TestAWSNitroFixtures
 PLACEHOLDER_FOR_REAL_AWS_ATTESTATION_DOCUMENT

@@ -1,174 +1,117 @@
 # Contributing to AWS Nitro Verifier
 
-Thank you for your interest in contributing to the AWS Nitro Verifier project! This document provides guidelines for maintaining the open-source nature of this library.
+Thank you for your interest in contributing to the AWS Nitro Verifier project! This document provides guidelines for contributors and information about the test fixtures.
 
-## 🚨 Important: Dependency Restrictions
+## Test Fixtures
 
-This library **strictly prohibits** certain proprietary dependencies to maintain its open-source nature. We have implemented multiple safeguards to prevent accidental inclusion of these dependencies.
+The project includes embedded test attestation documents for testing and validation. These fixtures allow developers to test the verifier without needing access to live AWS Nitro Enclaves.
 
-### Automated Safeguards
+### Embedded Test Data
 
-1. **Dependency Checker** (`make check-deps`)
-   - Scans all Go files for prohibited imports
-   - Checks `go.mod` and `go.sum` for prohibited dependencies
-   - Primary security safeguard - runs first in all checks
+The test fixtures are embedded in the project using Go's `//go:embed` directive and located in `testdata/`:
 
-2. **Pre-commit Git Hook** (`.git/hooks/pre-commit`)
-   - Automatically runs before every commit
-   - Scans for prohibited imports and references
-   - Runs tests and linting
-   - Prevents commits containing violations
+- **turnkey-prod.base64** - Production Turnkey attestation (for testing)
+- **aws-nitro-example.base64** - Generic AWS Nitro example
 
-3. **Makefile Commands**
-   - `make check-deps` - Check for prohibited dependencies
-   - `make lint` - Run full linting with dependency checks
-   - `make check` - Run all quality checks
+### Test Attestation Characteristics
 
-4. **GitHub Actions CI** (`.github/workflows/ci.yml`)
-   - Dependency check runs first in CI pipeline
-   - Fails the entire pipeline if violations are found
-   - Testing and security scanning
+The embedded attestations are test fixtures with expired certificates. They should only be used for testing with `SkipTimestampCheck: true`.
 
-## Development Setup
+**Production Test Attestation:**
 
-### 1. Install Required Tools
+- PCR[3]: `b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b`
+- UserData: `8a5510ca253818acec5fb27b3ca114b4a260fb84f881838eb124aae9c968ad74` (32 bytes)
+- PublicKey: 130 bytes (Dual P-256 ECDSA keys)
+
+### Obtaining Your Own Attestations
+
+#### For AWS Nitro Enclaves
+
+To obtain fresh attestation documents from AWS Nitro Enclaves:
+
+1. Create an enclave with your application
+2. From within the enclave, call the Nitro Secure Module to get an attestation
+3. The attestation document will contain your PCR values and optional user data
+
+Example from within an enclave (Python):
+
+```python
+import subprocess
+import base64
+
+# Get attestation with optional user data and nonce
+result = subprocess.run([
+    '/usr/bin/nitro-cli', 'describe-eif',
+    '--eif-path', '/app/enclave.eif'
+], capture_output=True, text=True)
+
+# Parse and encode the attestation document
+attestation = base64.b64encode(attestation_bytes).decode('utf-8')
+```
+
+For more information, see:
+- [AWS Nitro Enclaves Documentation](https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-concepts.html)
+- [Verifying AWS Nitro Root Certificates](https://docs.aws.amazon.com/enclaves/latest/user/verify-root.html)
+
+## Running Tests
+
+To run the test suite:
 
 ```bash
-make install-tools
+# Run all tests
+go test -v ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests for specific package
+go test -v ./internal
 ```
 
-This installs:
-- `golangci-lint` - For comprehensive linting
-- `gosec` - For security scanning
-
-### 2. Set Up Git Hooks
+## Building
 
 ```bash
-make setup-hooks
+# Build CLI tool
+go build ./cmd/awsnitroverifier
+
+# Build all packages
+go build ./...
 ```
 
-This ensures the pre-commit hook is executable.
+## Code Style
 
-### 3. Verify Setup
+- Follow standard Go conventions and [effective Go](https://golang.org/doc/effective_go)
+- Use `gofmt` for formatting
+- Use `golangci-lint` for linting
 
 ```bash
-make check
+# Format code
+gofmt -w .
+
+# Run linter
+golangci-lint run ./...
 ```
 
-This runs all quality checks including dependency verification.
+## Pull Request Process
 
-## Before Making Changes
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make your changes and add tests if applicable
+4. Ensure all tests pass (`go test ./...`)
+5. Run the linter (`golangci-lint run ./...`)
+6. Commit with clear messages
+7. Push to your fork
+8. Open a pull request with a clear description
 
-### Check for Prohibited Dependencies
+## Security Considerations
 
-```bash
-make check-deps
-```
+This library validates AWS Nitro attestations. When modifying validation logic:
 
-This command will scan your code for any prohibited dependencies.
-
-### Run Full Quality Checks
-
-```bash
-make ci
-```
-
-This runs the complete CI pipeline locally:
-- Dependency checks
-- Linting
-- Tests
-- Security scanning
-
-## Error Handling Guidelines
-
-This library uses standard Go error handling patterns:
-
-### ✅ Recommended Patterns
-```go
-import (
-    "errors"
-    "fmt"
-)
-
-// Use standard error wrapping
-return fmt.Errorf("failed to process: %w", err)
-return errors.New("something went wrong")
-```
-
-## Making Commits
-
-The pre-commit hook will automatically:
-
-1. 🔍 Check for prohibited dependencies
-2. 🧪 Run tests
-3. 🔍 Run linting
-4. ✅ Allow commit only if all checks pass
-
-## Testing Your Changes
-
-### Run Specific Checks
-```bash
-# Check dependencies only
-make check-deps
-
-# Run tests only  
-make test
-
-# Run linting only
-make lint
-
-# Run security scan
-make security-scan
-```
-
-### Run Everything
-```bash
-make ci
-```
-
-## Continuous Integration
-
-Our GitHub Actions workflow includes:
-
-1. **Dependency Security Check** - Primary safeguard
-   - Scans for prohibited imports
-   - Checks dependency files
-   - Fails fast if violations found
-
-2. **Testing and Quality**
-   - Full test suite with race detection
-   - Linting with `golangci-lint`
-   - Build verification
-
-## Release Preparation
-
-Before creating a release:
-
-```bash
-make prepare-release
-```
-
-This runs all checks and provides release readiness verification.
-
-## Troubleshooting
-
-### "golangci-lint not found"
-```bash
-make install-tools
-```
-
-### "Pre-commit hook failed"
-The hook is working correctly! Fix the issues it found and ensure tests pass.
-
-### "Dependency check failed"
-This means prohibited dependencies were found. Remove them and run:
-```bash
-go mod tidy
-make check-deps
-```
+- Ensure cryptographic operations use standard library implementations
+- Maintain ECDSA-only key type validation (AWS Nitro exclusively uses ECDSA)
+- Keep certificate chain validation logic secure
+- Test with both valid and invalid attestations
 
 ## Questions?
 
-If you have questions about these restrictions or need help with patterns, please open an issue describing your use case.
-
-Remember: These safeguards exist to ensure this library remains truly open-source and free of proprietary dependencies. Thank you for helping maintain this standard!
+Feel free to open an issue or discussion in the repository if you have questions about contributing or need clarification.

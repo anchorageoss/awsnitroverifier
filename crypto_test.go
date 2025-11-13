@@ -1,6 +1,4 @@
-//go:build !selectTest || isolatedTest
-
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"crypto/ecdsa"
@@ -14,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,19 +43,19 @@ const (
 
 func TestAWSNitroRootCertificate(t *testing.T) {
 	t.Run("success case", func(t *testing.T) {
-		cert := EmbeddedAWSNitroRootCertificate()
+		cert := embeddedAWSNitroRootCertificate()
 		require.NotNil(t, cert)
 		require.Contains(t, cert.Subject.String(), realAWSNitroRootCN)
 	})
 
 	t.Run("embedded certificate should be valid", func(t *testing.T) {
 		// This test ensures the embedded PEM certificate is properly formatted
-		cert := EmbeddedAWSNitroRootCertificate()
+		cert := embeddedAWSNitroRootCertificate()
 		require.NotNil(t, cert)
 
 		// Verify it's the expected AWS Nitro root
-		fingerprint := CalculateCertificateFingerprint(cert)
-		require.Equal(t, AWSNitroRootFingerprint, fingerprint)
+		fingerprint := calculateCertificateFingerprint(cert)
+		require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint)
 
 		// Verify certificate properties
 		require.True(t, cert.IsCA, "AWS Nitro root should be a CA certificate")
@@ -66,7 +65,7 @@ func TestAWSNitroRootCertificate(t *testing.T) {
 }
 
 func TestVerifyAWSNitroRootCertificate(t *testing.T) {
-	realRoot := EmbeddedAWSNitroRootCertificate()
+	realRoot := embeddedAWSNitroRootCertificate()
 
 	// Create fake certificate for negative test
 	fakeTemplate := &x509.Certificate{
@@ -106,18 +105,18 @@ func TestVerifyAWSNitroRootCertificate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := VerifyAWSNitroRootCertificate(tt.cert)
+			err := verifyAWSNitroRootCertificate(tt.cert)
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 		})
 	}
 }
 
 func TestCalculateCertificateFingerprint(t *testing.T) {
-	cert := EmbeddedAWSNitroRootCertificate()
+	cert := embeddedAWSNitroRootCertificate()
 
-	fingerprint := CalculateCertificateFingerprint(cert)
+	fingerprint := calculateCertificateFingerprint(cert)
 	require.NotEmpty(t, fingerprint)
-	require.Equal(t, AWSNitroRootFingerprint, fingerprint)
+	require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint)
 }
 
 // ============================================================================
@@ -191,8 +190,8 @@ func createFakeTestChain(t *testing.T) ([]byte, [][]byte, *x509.Certificate) {
 	rootCert, rootKey, rootDER := generateFakeTestCertificate(t, rootTemplate, nil, nil)
 
 	// SECURITY CHECK: Verify root fingerprint is NOT the real AWS Nitro fingerprint
-	testFingerprint := CalculateCertificateFingerprint(rootCert)
-	require.NotEqual(t, AWSNitroRootFingerprint, testFingerprint,
+	testFingerprint := calculateCertificateFingerprint(rootCert)
+	require.NotEqual(t, internal.AWSNitroRootFingerprint, testFingerprint,
 		"SECURITY: Test root certificate fingerprint MUST NOT match real AWS Nitro root fingerprint")
 
 	// Create FAKE intermediate certificate
@@ -349,7 +348,7 @@ func getRealAWSCABundle(t *testing.T) [][]byte {
 func buildVerifyOptions(t *testing.T, caBundle [][]byte, currentTime time.Time) x509.VerifyOptions {
 	t.Helper()
 
-	caCerts, err := ParseCertificateChain(caBundle)
+	caCerts, err := parseCertificateChain(caBundle)
 	require.NoError(t, err)
 
 	roots := x509.NewCertPool()
@@ -397,7 +396,7 @@ func assertErrorMatch(t *testing.T, err error, wantErr bool, errContains string)
 }
 
 // assertCertificateInfo validates that a CertificateInfo has all required fields populated
-func assertCertificateInfo(t *testing.T, info CertificateInfo, description string) {
+func assertCertificateInfo(t *testing.T, info internal.CertificateInfo, description string) {
 	t.Helper()
 
 	require.NotEmpty(t, info.Subject, "%s: subject should not be empty", description)
@@ -438,11 +437,11 @@ func TestRealAWSCertChain(t *testing.T) {
 	t.Run("root certificate verification", func(t *testing.T) {
 		rootCert := certs[1] // Second cert is the AWS Nitro root
 
-		err := VerifyAWSNitroRootCertificate(rootCert)
+		err := verifyAWSNitroRootCertificate(rootCert)
 		require.NoError(t, err, "Root certificate should be valid AWS Nitro root")
 
-		fingerprint := CalculateCertificateFingerprint(rootCert)
-		require.Equal(t, AWSNitroRootFingerprint, fingerprint,
+		fingerprint := calculateCertificateFingerprint(rootCert)
+		require.Equal(t, internal.AWSNitroRootFingerprint, fingerprint,
 			"Root fingerprint should match expected AWS Nitro root")
 	})
 
@@ -468,7 +467,7 @@ func TestRealAWSCertChain(t *testing.T) {
 
 	t.Run("successful verification with skipTimestamp", func(t *testing.T) {
 		// skipTimestamp should allow verification of expired certificates
-		err := VerifyCertificateChain(leafCert, caBundle, &AWSNitroVerifierOptions{SkipTimestampCheck: true})
+		err := verifyCertificateChain(leafCert, caBundle, &AWSNitroVerifierOptions{SkipTimestampCheck: true})
 		require.NoError(t, err, "Should verify with skipTimestamp despite expiration")
 	})
 
@@ -477,12 +476,12 @@ func TestRealAWSCertChain(t *testing.T) {
 		cert, err := x509.ParseCertificate(leafDER)
 		require.NoError(t, err)
 
-		err = VerifyCertificateChain(cert, caBundle, &AWSNitroVerifierOptions{SkipTimestampCheck: true})
+		err = verifyCertificateChain(cert, caBundle, &AWSNitroVerifierOptions{SkipTimestampCheck: true})
 		require.NoError(t, err, "Chain should verify with parsed certificate")
 	})
 
-	t.Run("ExtractCertificateChainInfo", func(t *testing.T) {
-		chainInfo, err := ExtractCertificateChainInfo(caBundle)
+	t.Run("extractCertificateChainInfo", func(t *testing.T) {
+		chainInfo, err := extractCertificateChainInfo(caBundle)
 		require.NoError(t, err)
 		require.Len(t, chainInfo, 4, "Expected 4 certificates in CA bundle")
 
@@ -499,26 +498,26 @@ func TestRealAWSCertChain(t *testing.T) {
 
 	t.Run("wrong order fails", func(t *testing.T) {
 		reversedBundle := reverseBundle(caBundle)
-		err := VerifyCertificateChain(leafCert, reversedBundle, nil)
+		err := verifyCertificateChain(leafCert, reversedBundle, nil)
 		assertErrorMatch(t, err, true, "first certificate in CA bundle is not AWS Nitro root")
 	})
 
 	t.Run("missing intermediate fails", func(t *testing.T) {
 		// Remove one intermediate (keep only root and first intermediate)
 		incompleteBundle := [][]byte{caBundle[0], caBundle[1]}
-		err := VerifyCertificateChain(leafCert, incompleteBundle, nil)
+		err := verifyCertificateChain(leafCert, incompleteBundle, nil)
 		assertErrorMatch(t, err, true, "certificate chain verification failed")
 	})
 
 	t.Run("only root fails", func(t *testing.T) {
 		rootOnlyBundle := [][]byte{caBundle[0]}
-		err := VerifyCertificateChain(leafCert, rootOnlyBundle, nil)
+		err := verifyCertificateChain(leafCert, rootOnlyBundle, nil)
 		assertErrorMatch(t, err, true, "certificate chain verification failed")
 	})
 }
 
 // ============================================================================
-// Table-Driven Tests: DecodePEMCertificate
+// Table-Driven Tests: decodePEMCertificate
 // ============================================================================
 
 func TestDecodePEMCertificate(t *testing.T) {
@@ -531,7 +530,7 @@ func TestDecodePEMCertificate(t *testing.T) {
 	}{
 		{
 			name:    "valid AWS Nitro root certificate",
-			pemData: []byte(awsNitroRootPEM),
+			pemData: []byte(internal.AWSNitroRootPEM),
 			wantErr: false,
 			validate: func(t *testing.T, cert *x509.Certificate) {
 				require.NotNil(t, cert)
@@ -647,7 +646,7 @@ IwLz3/Y=
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cert, err := DecodePEMCertificate(tt.pemData)
+			cert, err := decodePEMCertificate(tt.pemData)
 
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 			if tt.wantErr {
@@ -663,7 +662,7 @@ IwLz3/Y=
 }
 
 // ============================================================================
-// Table-Driven Tests: ParseCertificateChain
+// Table-Driven Tests: parseCertificateChain
 // ============================================================================
 
 func TestParseCertificateChain(t *testing.T) {
@@ -725,7 +724,7 @@ func TestParseCertificateChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			certs, err := ParseCertificateChain(tt.certs)
+			certs, err := parseCertificateChain(tt.certs)
 
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 			if tt.wantErr {
@@ -741,7 +740,7 @@ func TestParseCertificateChain(t *testing.T) {
 }
 
 // ============================================================================
-// Table-Driven Tests: VerifyCertificateChain
+// Table-Driven Tests: verifyCertificateChain
 // ============================================================================
 
 func TestVerifyCertificateChain(t *testing.T) {
@@ -831,14 +830,14 @@ func TestVerifyCertificateChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := VerifyCertificateChain(tt.targetCert, tt.caBundle, tt.opts)
+			err := verifyCertificateChain(tt.targetCert, tt.caBundle, tt.opts)
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 		})
 	}
 }
 
 // ============================================================================
-// Table-Driven Tests: ExtractCertificateChainInfo
+// Table-Driven Tests: extractCertificateChainInfo
 // ===========================================================================
 
 func TestExtractCertificateChainInfo(t *testing.T) {
@@ -851,14 +850,14 @@ func TestExtractCertificateChainInfo(t *testing.T) {
 		wantErr     bool
 		errContains string
 		wantLen     int
-		validate    func(t *testing.T, chainInfo []CertificateInfo)
+		validate    func(t *testing.T, chainInfo []internal.CertificateInfo)
 	}{
 		{
 			name:     "valid certificate chain",
 			caBundle: validCABundle,
 			wantErr:  false,
 			wantLen:  2,
-			validate: func(t *testing.T, chainInfo []CertificateInfo) {
+			validate: func(t *testing.T, chainInfo []internal.CertificateInfo) {
 				// Check root certificate info
 				assertCertificateInfo(t, chainInfo[0], "root certificate")
 				require.Contains(t, chainInfo[0].Subject, testRootCN)
@@ -888,7 +887,7 @@ func TestExtractCertificateChainInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chainInfo, err := ExtractCertificateChainInfo(tt.caBundle)
+			chainInfo, err := extractCertificateChainInfo(tt.caBundle)
 
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 			if tt.wantErr {
@@ -909,7 +908,7 @@ func TestExtractCertificateChainInfo(t *testing.T) {
 
 func TestVerifyAWSNitroRootCertificate_EdgeCases(t *testing.T) {
 	// Get real AWS Nitro root for valid test case
-	realRoot := EmbeddedAWSNitroRootCertificate()
+	realRoot := embeddedAWSNitroRootCertificate()
 
 	// Create fake test certificate with wrong fingerprint
 	fakeRootTemplate := &x509.Certificate{
@@ -949,7 +948,7 @@ func TestVerifyAWSNitroRootCertificate_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := VerifyAWSNitroRootCertificate(tt.cert)
+			err := verifyAWSNitroRootCertificate(tt.cert)
 			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
 		})
 	}
@@ -957,7 +956,7 @@ func TestVerifyAWSNitroRootCertificate_EdgeCases(t *testing.T) {
 
 func TestVerifyAWSNitroRootCertificate_SubjectValidation(t *testing.T) {
 	// Get real AWS Nitro root
-	realRoot := EmbeddedAWSNitroRootCertificate()
+	realRoot := embeddedAWSNitroRootCertificate()
 
 	// Create a modified certificate with real fingerprint but manipulated subject
 	// This reaches the subject validation path by passing fingerprint check
@@ -973,14 +972,14 @@ func TestVerifyAWSNitroRootCertificate_SubjectValidation(t *testing.T) {
 	certWithWrongSubject.Raw = realRoot.Raw
 
 	// This should fail at subject check (after passing fingerprint)
-	err := VerifyAWSNitroRootCertificate(certWithWrongSubject)
+	err := verifyAWSNitroRootCertificate(certWithWrongSubject)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "certificate subject mismatch")
 }
 
 func TestVerifyAWSNitroRootCertificate_SelfSignedValidation(t *testing.T) {
 	// Get real AWS Nitro root
-	realRoot := EmbeddedAWSNitroRootCertificate()
+	realRoot := embeddedAWSNitroRootCertificate()
 
 	// Create a fake parent certificate
 	fakeParentTemplate := &x509.Certificate{
@@ -1011,7 +1010,7 @@ func TestVerifyAWSNitroRootCertificate_SelfSignedValidation(t *testing.T) {
 	certNotSelfSigned.RawSubjectPublicKeyInfo = fakeParentDER[len(fakeParentDER)-100:] // Use different public key bytes
 
 	// This should fail at self-signed check (after passing fingerprint and subject)
-	err := VerifyAWSNitroRootCertificate(certNotSelfSigned)
+	err := verifyAWSNitroRootCertificate(certNotSelfSigned)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "root certificate is not self-signed")
 }
@@ -1025,19 +1024,19 @@ func TestSafetyCheckTestCertificatesCannotMatchRealAWS(t *testing.T) {
 	_, caBundle, _ := createFakeTestChain(t)
 
 	// Parse the test root
-	certs, err := ParseCertificateChain(caBundle)
+	certs, err := parseCertificateChain(caBundle)
 	require.NoError(t, err)
 	testRoot := certs[0]
 
 	// Get real AWS root
-	realRoot := EmbeddedAWSNitroRootCertificate()
+	realRoot := embeddedAWSNitroRootCertificate()
 
 	// SECURITY: Verify fingerprints are different
-	testFingerprint := CalculateCertificateFingerprint(testRoot)
-	realFingerprint := CalculateCertificateFingerprint(realRoot)
+	testFingerprint := calculateCertificateFingerprint(testRoot)
+	realFingerprint := calculateCertificateFingerprint(realRoot)
 	require.NotEqual(t, realFingerprint, testFingerprint,
 		"SECURITY: Test certificate fingerprint MUST differ from real AWS Nitro root")
-	require.NotEqual(t, AWSNitroRootFingerprint, testFingerprint,
+	require.NotEqual(t, internal.AWSNitroRootFingerprint, testFingerprint,
 		"SECURITY: Test certificate fingerprint MUST NOT match AWS Nitro constant")
 
 	// SECURITY: Verify subjects are different
@@ -1047,7 +1046,7 @@ func TestSafetyCheckTestCertificatesCannotMatchRealAWS(t *testing.T) {
 		"SECURITY: Test certificate subject MUST contain FAKE-TEST marker")
 
 	// SECURITY: Verify test cert fails AWS verification
-	err = VerifyAWSNitroRootCertificate(testRoot)
+	err = verifyAWSNitroRootCertificate(testRoot)
 	require.Error(t, err, "SECURITY: Test certificate MUST fail AWS Nitro root verification")
 
 	// SECURITY: Verify all certificates in chain have FAKE-TEST markers
@@ -1188,192 +1187,7 @@ func TestVerifyCertificateChainMultipleIntermediates(t *testing.T) {
 	// Build CA bundle: [root, intermediate1, intermediate2]
 	caBundle := [][]byte{rootDER, intermediate1DER, intermediate2DER}
 
-	err := VerifyCertificateChain(leafCert, caBundle, nil)
+	err := verifyCertificateChain(leafCert, caBundle, nil)
 	require.Error(t, err, "FAKE test certificates MUST be rejected")
 	require.Contains(t, err.Error(), "first certificate in CA bundle is not AWS Nitro root")
-}
-
-// ============================================================================
-// Common Name (CN) Validation Tests
-// ============================================================================
-
-func TestVerifyCertificateChain_CNValidation(t *testing.T) {
-	// Use real AWS certificate chain for testing
-	certs := parseRealAWSCertChain(t)
-	leafCert := certs[0]
-	caBundle := getRealAWSCABundle(t)
-
-	// Extract actual CNs from the chain for reference
-	// Chain order: [leaf, root, regional, zonal, instance]
-	leafCN := leafCert.Subject.CommonName
-	rootCN := certs[1].Subject.CommonName
-	regionalCN := certs[2].Subject.CommonName
-	zonalCN := certs[3].Subject.CommonName
-	instanceCN := certs[4].Subject.CommonName
-
-	tests := []struct {
-		name        string
-		targetCert  *x509.Certificate
-		caBundle    [][]byte
-		opts        *AWSNitroVerifierOptions
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:       "nil opts - no CN validation",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-			},
-			wantErr: false,
-		},
-		{
-			name:       "empty ExpectedCertificateCNs - no validation",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck:     true,
-				ExpectedCertificateCNs: []string{},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "nil ExpectedCertificateCNs - no validation",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck:     true,
-				ExpectedCertificateCNs: nil,
-			},
-			wantErr: false,
-		},
-		{
-			name:       "validate only leaf CN",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN, // validate leaf
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "validate leaf and instance CNs, skip intermediates",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN,     // validate leaf
-					"",         // skip root
-					"",         // skip regional
-					"",         // skip zonal
-					instanceCN, // validate instance
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "validate full chain",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN,
-					rootCN,
-					regionalCN,
-					zonalCN,
-					instanceCN,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name:       "leaf CN mismatch",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					"wrong-instance-id.us-east-1.aws", // wrong leaf CN
-				},
-			},
-			wantErr:     true,
-			errContains: "certificate CN mismatch at position 0",
-		},
-		{
-			name:       "root CN mismatch",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN,
-					"wrong.root", // wrong root CN
-				},
-			},
-			wantErr:     true,
-			errContains: "certificate CN mismatch at position 1",
-		},
-		{
-			name:       "intermediate CN mismatch",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN,
-					rootCN,
-					"wrong-regional-cn.us-east-1.aws.nitro-enclaves", // wrong regional CN
-				},
-			},
-			wantErr:     true,
-			errContains: "certificate CN mismatch at position 2",
-		},
-		{
-			name:       "too many expected CNs",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					leafCN,
-					rootCN,
-					regionalCN,
-					zonalCN,
-					instanceCN,
-					"extra-cert-that-doesnt-exist", // position 5 doesn't exist
-				},
-			},
-			wantErr:     true,
-			errContains: "ExpectedCertificateCNs[5] provided but chain only has 5 certificates",
-		},
-		{
-			name:       "skip all except instance",
-			targetCert: leafCert,
-			caBundle:   caBundle,
-			opts: &AWSNitroVerifierOptions{
-				SkipTimestampCheck: true,
-				ExpectedCertificateCNs: []string{
-					"",
-					"",
-					"",
-					"",
-					instanceCN, // only validate instance
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := VerifyCertificateChain(tt.targetCert, tt.caBundle, tt.opts)
-			assertErrorMatch(t, err, tt.wantErr, tt.errContains)
-		})
-	}
 }

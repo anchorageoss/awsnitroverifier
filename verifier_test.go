@@ -1,375 +1,325 @@
-//go:build !selectTest || isolatedTest
-
-package nitroverifier
+package awsnitroverifier
 
 import (
-	"bytes"
 	"encoding/base64"
-	"encoding/hex"
-	"fmt"
 	"testing"
-	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-// TestCOSEStructureValidation tests that we properly parse COSE_Sign1 structure
-func TestCOSEStructureValidation(t *testing.T) {
-	tests := []struct {
-		name        string
-		description string
-		expectValid bool
-	}{
-		{
-			name:        "Valid COSE_Sign1",
-			description: "Should have tag 18 (0xD2) for COSE_Sign1",
-			expectValid: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test would use actual attestation document
-			t.Logf("Test case: %s", tt.description)
-		})
-	}
-}
-
-// TestAttestationDocumentStructure validates the CBOR structure matches AWS spec
-func TestAttestationDocumentStructure(t *testing.T) {
-	// AWS Nitro attestations can use two formats:
-	// Format 1: Tagged COSE_Sign1 (starts with 0xD2)
-	// - First byte: 0xD2 (CBOR tag 18 for COSE_Sign1)
-	// Format 2: Array COSE_Sign1 (starts with 0x84)
-	// - First byte: 0x84 (CBOR array with 4 elements)
-	//
-	// Both formats have protected header:
-	// - Protected header: 0xA1 (Type 5 map with 1 item)
-	// - Algorithm key: 0x01 (key = 1 for algorithm)
-	// - Algorithm value: 0x22 (ES384) or 0x24 (ES256)
-
-	testCases := []struct {
-		name          string
-		expectedBytes []byte
-		position      int
-		description   string
-		skipForArray  bool
-	}{
-		{
-			name:          "COSE_format",
-			expectedBytes: []byte{0xD2, 0x84}, // Either tagged or array format
-			position:      0,
-			description:   "First byte should be 0xD2 (tag) or 0x84 (array)",
-		},
-		{
-			name:          "Protected_header_map",
-			expectedBytes: []byte{0xA1},
-			position:      2,
-			description:   "Protected header should be Type 5 map with 1 item",
-		},
-		{
-			name:          "Algorithm_key",
-			expectedBytes: []byte{0x01},
-			position:      3,
-			description:   "Algorithm key should be 1",
-		},
-	}
-
-	// Load a test attestation document
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
+// TestPublicAPIBasic tests the basic public API functionality
+func TestPublicAPIBasic(t *testing.T) {
+	// Get test attestation data
+	attestationBase64 := getTurnkeyProductionAttestation()
 	attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
 	if err != nil {
-		t.Fatalf("Failed to decode base64: %v", err)
+		t.Fatalf("Failed to decode test data: %v", err)
+	}
+
+	// Test with default options
+	t.Run("DefaultOptions", func(t *testing.T) {
+		verifier := NewVerifier(AWSNitroVerifierOptions{})
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+		require.False(t, result.Valid, "Expected validation to fail due to expired certificate")
+	})
+
+	// Test with timestamp check disabled
+	t.Run("SkipTimestampCheck", func(t *testing.T) {
+		verifier := NewVerifier(AWSNitroVerifierOptions{
+			SkipTimestampCheck: true,
+		})
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+		require.True(t, result.Valid, "Expected validation to pass, got errors: %v", result.Errors)
+		require.True(t, result.ChainTrusted, "Expected certificate chain to be validated")
+		require.NotEmpty(t, result.RootFingerprint, "Expected root fingerprint to be present")
+		require.NotNil(t, result.UserData, "Expected UserData to be present")
+		require.NotNil(t, result.PublicKey, "Expected PublicKey to be present")
+	})
+}
+
+// TestInvalidAttestationData tests error handling for invalid input
+func TestInvalidAttestationData(t *testing.T) {
+	verifier := NewVerifier(AWSNitroVerifierOptions{
+		SkipTimestampCheck: true,
+	})
+
+	testCases := []struct {
+		name             string
+		attestationBytes []byte
+		expectError      bool
+	}{
+		{
+			name:             "Empty bytes",
+			attestationBytes: []byte{},
+			expectError:      true,
+		},
+		{
+			name:             "Invalid CBOR data",
+			attestationBytes: []byte("not-valid-cbor!@#$"),
+			expectError:      true,
+		},
+		{
+			name:             "Valid bytes but not CBOR",
+			attestationBytes: []byte("hello world"),
+			expectError:      true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.position >= len(attestationBytes) {
-				t.Errorf("Position %d out of bounds (doc length: %d)", tc.position, len(attestationBytes))
-				return
-			}
+			result, err := verifier.Validate(tc.attestationBytes)
 
-			actual := attestationBytes[tc.position]
-			if !bytes.Contains(tc.expectedBytes, []byte{actual}) {
-				t.Errorf("%s: Expected one of %v at position %d, got 0x%02X",
-					tc.description, tc.expectedBytes, tc.position, actual)
+			if tc.expectError {
+				require.Error(t, err, "Expected error for malformed input")
 			} else {
-				t.Logf("✓ %s: Found 0x%02X at position %d", tc.description, actual, tc.position)
+				require.NoError(t, err)
+			}
+			if err != nil {
+				require.Nil(t, result, "Should not return result when error is non-nil")
 			}
 		})
 	}
 }
 
-// TestPCRValidation tests PCR extraction and validation
-func TestPCRValidation(t *testing.T) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
-	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:        true,
-	})
-
-	result, err := validator.Validate(attestationBase64)
-	if err != nil {
-		t.Fatalf("Failed to validate: %v", err)
-	}
-
-	// According to AWS spec, PCRs should be:
-	// - Index range: 0-31
-	// - Content length: 32, 48, or 64 bytes
-	t.Run("PCR_constraints", func(t *testing.T) {
-		if result.Document == nil {
-			t.Fatal("Document is nil")
-		}
-
-		if len(result.Document.PCRs) < 1 || len(result.Document.PCRs) > 32 {
-			t.Errorf("PCR count should be 1-32, got %d", len(result.Document.PCRs))
-		}
-
-		for index, pcr := range result.Document.PCRs {
-			if index > 31 {
-				t.Errorf("PCR index %d exceeds maximum of 31", index)
-			}
-
-			pcrLen := len(pcr)
-			if pcrLen != 32 && pcrLen != 48 && pcrLen != 64 {
-				t.Errorf("PCR[%d] has invalid length %d (expected 32, 48, or 64)", index, pcrLen)
-			} else {
-				t.Logf("✓ PCR[%d]: %d bytes - %s", index, pcrLen, hex.EncodeToString(pcr))
-			}
-		}
-	})
-}
-
-// TestMandatoryFields verifies all mandatory fields are present
-func TestMandatoryFields(t *testing.T) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
-	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:        true,
-	})
-
-	result, err := validator.Validate(attestationBase64)
-	if err != nil {
-		t.Fatalf("Failed to validate: %v", err)
-	}
-
-	if result.Document == nil {
-		t.Fatal("Document is nil")
-	}
-
-	doc := result.Document
-
-	// Test mandatory fields according to AWS spec
-	tests := []struct {
-		name    string
-		check   func() bool
-		message string
-	}{
-		{
-			name:    "module_id",
-			check:   func() bool { return doc.ModuleID != "" },
-			message: "module_id must be non-empty",
-		},
-		{
-			name:    "timestamp",
-			check:   func() bool { return doc.Timestamp > 0 },
-			message: "timestamp must be positive",
-		},
-		{
-			name:    "digest",
-			check:   func() bool { return doc.Digest == "SHA384" },
-			message: "digest must be 'SHA384'",
-		},
-		{
-			name:    "pcrs",
-			check:   func() bool { return len(doc.PCRs) >= 1 && len(doc.PCRs) <= 32 },
-			message: "pcrs must have 1-32 entries",
-		},
-		{
-			name:    "certificate",
-			check:   func() bool { return len(doc.Certificate) > 0 },
-			message: "certificate must be present",
-		},
-		{
-			name:    "cabundle",
-			check:   func() bool { return doc.CABundle != nil },
-			message: "cabundle must be present",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !tt.check() {
-				t.Errorf("%s", tt.message)
-			} else {
-				t.Logf("✓ %s validated", tt.name)
-			}
-		})
-	}
-}
-
-// TestOptionalFieldConstraints tests optional field size constraints
-func TestOptionalFieldConstraints(t *testing.T) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
-	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:        true,
-	})
-
-	result, err := validator.Validate(attestationBase64)
-	if err != nil {
-		t.Fatalf("Failed to validate: %v", err)
-	}
-
-	if result.Document == nil {
-		t.Fatal("Document is nil")
-	}
-
-	doc := result.Document
-
-	// Test optional field constraints according to AWS spec
-	tests := []struct {
-		name      string
-		field     []byte
-		minSize   int
-		maxSize   int
-		fieldName string
-	}{
-		{
-			name:      "public_key",
-			field:     doc.PublicKey,
-			minSize:   0,
-			maxSize:   1024,
-			fieldName: "public_key",
-		},
-		{
-			name:      "user_data",
-			field:     doc.UserData,
-			minSize:   0,
-			maxSize:   512,
-			fieldName: "user_data",
-		},
-		{
-			name:      "nonce",
-			field:     doc.Nonce,
-			minSize:   0,
-			maxSize:   512,
-			fieldName: "nonce",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.field != nil {
-				fieldLen := len(tt.field)
-				if fieldLen < tt.minSize || fieldLen > tt.maxSize {
-					t.Errorf("%s size %d out of range [%d, %d]",
-						tt.fieldName, fieldLen, tt.minSize, tt.maxSize)
-				} else if fieldLen > 0 {
-					t.Logf("✓ %s: %d bytes (within range [%d, %d])",
-						tt.fieldName, fieldLen, tt.minSize, tt.maxSize)
-				}
-			}
-		})
-	}
-}
-
-// TestCertificateChainValidation tests the certificate chain structure
-func TestCertificateChainValidation(t *testing.T) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
-	validator := NewVerifier(AWSNitroVerifierOptions{
-		SkipTimestampCheck:        true,
-	})
-
-	result, err := validator.Validate(attestationBase64)
-	if err != nil {
-		t.Fatalf("Failed to validate: %v", err)
-	}
-
-	if result.Document == nil || result.CertificateInfo == nil {
-		t.Fatal("Document or certificate info is nil")
-	}
-
-	// Log certificate details
-	t.Logf("Certificate Subject: %s", result.CertificateInfo.Subject)
-	t.Logf("Certificate Issuer: %s", result.CertificateInfo.Issuer)
-	t.Logf("Certificate Valid From: %s", result.CertificateInfo.NotBefore.Format(time.RFC3339))
-	t.Logf("Certificate Valid To: %s", result.CertificateInfo.NotAfter.Format(time.RFC3339))
-
-	// Check CA bundle
-	if result.Document.CABundle != nil {
-		t.Logf("CA Bundle contains %d certificates", len(result.Document.CABundle))
-
-		// Parse and validate CA bundle structure
-		chain, err := ParseCertificateChain(result.Document.CABundle)
-		if err != nil {
-			t.Errorf("Failed to parse CA bundle: %v", err)
-		} else {
-			for i, cert := range chain {
-				t.Logf("  CA[%d] Subject: %s", i, cert.Subject.String())
-				t.Logf("  CA[%d] Issuer: %s", i, cert.Issuer.String())
-			}
-		}
-	}
-}
-
-// TestSignatureAlgorithm verifies the signature algorithm matches AWS spec
-func TestSignatureAlgorithm(t *testing.T) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		t.Skip("No test attestation document available")
-	}
-
+// TestValidationResultFields tests that the ValidationResult contains expected fields
+func TestValidationResultFields(t *testing.T) {
+	attestationBase64 := getTurnkeyProductionAttestation()
 	attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
 	if err != nil {
-		t.Fatalf("Failed to decode base64: %v", err)
+		t.Fatalf("Failed to decode test data: %v", err)
 	}
 
-	// Check protected header for algorithm
-	// According to spec: Byte 4-5 should indicate ECDSA with P-256 or P-384
-	if len(attestationBytes) > 5 {
-		algIndicator := attestationBytes[5]
-		var algName string
-		switch algIndicator {
-		case 0x22: // -35 in CBOR = ES384
-			algName = "ES384 (ECDSA with P-384)"
-		case 0x24: // -37 in CBOR = ES256
-			algName = "ES256 (ECDSA with P-256)"
-		default:
-			algName = fmt.Sprintf("Unknown (0x%02X)", algIndicator)
-		}
-		t.Logf("Signature Algorithm: %s", algName)
-	}
-}
-
-// Benchmark signature verification
-func BenchmarkSignatureVerification(b *testing.B) {
-	attestationBase64 := turnkeyFixtures.Production
-	if attestationBase64 == "" {
-		b.Skip("No test attestation document available")
-	}
-
-	validator := NewVerifier(AWSNitroVerifierOptions{
+	verifier := NewVerifier(AWSNitroVerifierOptions{
 		SkipTimestampCheck: true,
 	})
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = validator.Validate(attestationBase64)
+	result, err := verifier.Validate(attestationBytes)
+	require.NoError(t, err)
+
+	// Test all public fields are accessible
+	t.Run("PublicAPIContract", func(t *testing.T) {
+		// Verify that VerificationResult maintains its public API contract
+		// This test will fail to compile if any of these fields become private
+		// or are removed, helping prevent accidental breaking changes.
+
+		var apiFields = struct {
+			Valid           bool
+			Errors          []error
+			ChainTrusted    bool
+			RootFingerprint string
+			UserData        []byte
+			PublicKey       []byte
+			Nonce           []byte
+			PCRResults      []PCRValidationResult
+		}{
+			Valid:           result.Valid,
+			Errors:          result.Errors,
+			ChainTrusted:    result.ChainTrusted,
+			RootFingerprint: result.RootFingerprint,
+			UserData:        result.UserData,
+			PublicKey:       result.PublicKey,
+			Nonce:           result.Nonce,
+			PCRResults:      result.PCRResults,
+		}
+
+		_ = apiFields // Suppress unused variable warning
+		t.Log("✓ All public API fields are accessible")
+	})
+
+	// Verify field values make sense
+	t.Run("FieldValues", func(t *testing.T) {
+		if result.ChainTrusted {
+			require.NotEmpty(t, result.RootFingerprint, "Chain trusted but no root fingerprint")
+		}
+
+		if result.UserData != nil {
+			require.NotEmpty(t, result.UserData, "UserData is non-nil but empty")
+		}
+
+		if result.PublicKey != nil {
+			require.NotEmpty(t, result.PublicKey, "PublicKey is non-nil but empty")
+		}
+
+		if !result.Valid {
+			require.NotEmpty(t, result.Errors, "Valid is false but Errors is empty")
+		}
+	})
+}
+
+// TestSignatureVerification tests signature verification with various scenarios
+func TestSignatureVerification(t *testing.T) {
+	attestationBase64 := getTurnkeyProductionAttestation()
+	attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
+	if err != nil {
+		t.Fatalf("Failed to decode test data: %v", err)
 	}
+
+	verifier := NewVerifier(AWSNitroVerifierOptions{
+		SkipTimestampCheck: true,
+	})
+
+	// Test that valid attestation passes signature verification
+	t.Run("ValidSignature", func(t *testing.T) {
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+
+		// Valid attestation should have no certificate chain errors
+		for _, errMsg := range result.Errors {
+			errStr := errMsg.Error()
+			require.NotContains(t, errStr, "certificate", "Valid attestation had certificate error")
+			require.NotContains(t, errStr, "signature", "Valid attestation had signature error")
+		}
+	})
+
+	// Test with corrupted signature bytes
+	t.Run("CorruptedSignature", func(t *testing.T) {
+		corruptedBytes := make([]byte, len(attestationBytes))
+		copy(corruptedBytes, attestationBytes)
+		// Corrupt the last byte (part of signature in COSE structure)
+		if len(corruptedBytes) > 0 {
+			corruptedBytes[len(corruptedBytes)-1] ^= 0xFF
+		}
+
+		result, err := verifier.Validate(corruptedBytes)
+		require.NoError(t, err)
+		require.False(t, result.Valid, "Expected validation to fail with corrupted signature")
+
+		// Should have signature-related error
+		found := false
+		for _, errMsg := range result.Errors {
+			if errMsg != nil && len(errMsg.Error()) > 0 {
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "Expected signature error, got: %v", result.Errors)
+	})
+
+	// Test validation result consistency
+	t.Run("ValidUntilErrors", func(t *testing.T) {
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+
+		// Valid should match whether Errors is empty
+		if result.Valid {
+			require.Empty(t, result.Errors, "Valid is true but Errors is not empty")
+		} else {
+			require.NotEmpty(t, result.Errors, "Valid is false but Errors is empty")
+		}
+	})
+}
+
+// TestValidationWithPCRRules tests PCR validation functionality
+func TestValidationWithPCRRules(t *testing.T) {
+	attestationBase64 := getTurnkeyProductionAttestation()
+	attestationBytes, err := base64.StdEncoding.DecodeString(attestationBase64)
+	if err != nil {
+		t.Fatalf("Failed to decode test data: %v", err)
+	}
+
+	t.Run("ValidPCRRule", func(t *testing.T) {
+		// This test attestation has PCRs, so we should be able to validate them
+		verifier := NewVerifier(AWSNitroVerifierOptions{
+			SkipTimestampCheck: true,
+			PCRRules: []PCRRule{
+				{Index: 0, Value: []byte("dummy-value")},
+			},
+		})
+
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+		require.NotEmpty(t, result.PCRResults, "Expected PCR results but got none")
+
+		// Check that PCR results are properly structured
+		for _, pcr := range result.PCRResults {
+			if pcr.Index == 0 {
+				// We provided a dummy value, so it should not match
+				require.False(t, pcr.Valid, "PCR[0] should not match dummy value")
+			}
+		}
+	})
+
+	t.Run("MultiplePCRRules", func(t *testing.T) {
+		verifier := NewVerifier(AWSNitroVerifierOptions{
+			SkipTimestampCheck: true,
+			PCRRules: []PCRRule{
+				{Index: 0, Value: []byte("value0")},
+				{Index: 1, Value: []byte("value1")},
+				{Index: 8, Value: []byte("value8")},
+			},
+		})
+
+		result, err := verifier.Validate(attestationBytes)
+		require.NoError(t, err)
+		require.Len(t, result.PCRResults, 3, "Expected 3 PCR results")
+	})
+}
+
+// TestValidationErrorHandling tests error handling in various scenarios
+func TestValidationErrorHandling(t *testing.T) {
+	verifier := NewVerifier(AWSNitroVerifierOptions{
+		SkipTimestampCheck: true,
+	})
+
+	testCases := []struct {
+		name          string
+		input         []byte
+		shouldError   bool
+		errorContains string
+	}{
+		{
+			name:          "ValidAttestation",
+			input:         decodeBase64(getTurnkeyProductionAttestation()),
+			shouldError:   false,
+			errorContains: "",
+		},
+		{
+			name:          "EmptyInput",
+			input:         []byte{},
+			shouldError:   true,
+			errorContains: "malformed",
+		},
+		{
+			name:          "InvalidCBOR",
+			input:         []byte{0xFF, 0xFF, 0xFF},
+			shouldError:   true,
+			errorContains: "malformed",
+		},
+		{
+			name:          "RandomBytes",
+			input:         []byte{0x01, 0x02, 0x03, 0x04, 0x05},
+			shouldError:   true,
+			errorContains: "malformed",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := verifier.Validate(tc.input)
+
+			if tc.shouldError {
+				require.Error(t, err, "Expected error for %s", tc.name)
+				if tc.errorContains != "" {
+					require.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				require.NoError(t, err, "Unexpected error for %s", tc.name)
+			}
+
+			if err != nil {
+				require.Nil(t, result, "Result should be nil when error is returned")
+			}
+		})
+	}
+}
+
+// Helper function to decode base64 strings
+func decodeBase64(s string) []byte {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

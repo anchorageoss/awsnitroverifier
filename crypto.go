@@ -1,4 +1,4 @@
-package nitroverifier
+package awsnitroverifier
 
 import (
 	"crypto/x509"
@@ -9,7 +9,7 @@ import (
 // DecodePEMCertificate decodes a single PEM certificate block and parses it.
 // Returns an error if there are multiple PEM blocks or trailing non-whitespace data.
 // This ensures that multi-certificate PEM files don't silently ignore additional certificates.
-func DecodePEMCertificate(pemData []byte) (*x509.Certificate, error) {
+func decodePEMCertificate(pemData []byte) (*x509.Certificate, error) {
 	block, rest := pem.Decode(pemData)
 	if block == nil {
 		return nil, fmt.Errorf("failed to parse PEM block")
@@ -42,8 +42,8 @@ func DecodePEMCertificate(pemData []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// ParseCertificateChain parses a chain of DER-encoded certificates
-func ParseCertificateChain(certs [][]byte) ([]*x509.Certificate, error) {
+// parseCertificateChain parses a chain of DER-encoded certificates
+func parseCertificateChain(certs [][]byte) ([]*x509.Certificate, error) {
 	chain := make([]*x509.Certificate, 0, len(certs))
 
 	for i, certDER := range certs {
