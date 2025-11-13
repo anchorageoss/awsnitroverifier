@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anchorageoss/awsnitroverifier/internal"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -60,13 +59,13 @@ func TestParseCOSESign1(t *testing.T) {
 		data        []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, cose *internal.COSESign1)
+		validate    func(t *testing.T, cose *coseSign1)
 	}{
 		{
 			name:    "valid AWS Nitro COSE_Sign1",
 			data:    rawAttestation,
 			wantErr: false,
-			validate: func(t *testing.T, cose *internal.COSESign1) {
+			validate: func(t *testing.T, cose *coseSign1) {
 				require.NotNil(t, cose.ProtectedHeaders)
 				require.NotNil(t, cose.Payload)
 				require.NotNil(t, cose.Signature)
@@ -164,13 +163,13 @@ func TestParseAttestationDocument(t *testing.T) {
 		data        []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, doc *internal.AttestationDocument)
+		validate    func(t *testing.T, doc *AttestationDocument)
 	}{
 		{
 			name:    "valid AWS Nitro attestation document",
 			data:    validPayload,
 			wantErr: false,
-			validate: func(t *testing.T, doc *internal.AttestationDocument) {
+			validate: func(t *testing.T, doc *AttestationDocument) {
 				require.NotEmpty(t, doc.ModuleID)
 				require.NotZero(t, doc.Timestamp)
 				require.NotEmpty(t, doc.Certificate)
@@ -291,13 +290,13 @@ func TestExtractCertificateInfo(t *testing.T) {
 		certDER     []byte
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, info *internal.CertificateInfo)
+		validate    func(t *testing.T, info *certificateInfo)
 	}{
 		{
 			name:    "valid certificate from AWS Nitro chain",
 			certDER: validCertDER,
 			wantErr: false,
-			validate: func(t *testing.T, info *internal.CertificateInfo) {
+			validate: func(t *testing.T, info *certificateInfo) {
 				require.NotZero(t, info.NotBefore)
 				require.NotZero(t, info.NotAfter)
 				require.NotEmpty(t, info.Subject)
@@ -353,14 +352,14 @@ func TestExtractCertificateInfo(t *testing.T) {
 // ============================================================================
 
 func TestValidateCertificateTimestamp(t *testing.T) {
-	validCert := &internal.CertificateInfo{
+	validCert := &certificateInfo{
 		NotBefore: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		NotAfter:  time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC),
 	}
 
 	tests := []struct {
 		name        string
-		certInfo    *internal.CertificateInfo
+		certInfo    *certificateInfo
 		checkTime   time.Time
 		wantErr     bool
 		errContains string
@@ -435,7 +434,7 @@ func TestValidateCertificateTimestamp(t *testing.T) {
 // ============================================================================
 
 func TestAttestationDocumentValidate(t *testing.T) {
-	validDoc := &internal.AttestationDocument{
+	validDoc := &AttestationDocument{
 		ModuleID:    "test-module",
 		Timestamp:   1234567890,
 		Certificate: []byte("cert"),
@@ -444,7 +443,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		doc         *internal.AttestationDocument
+		doc         *AttestationDocument
 		wantErr     bool
 		errContains string
 	}{
@@ -455,7 +454,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing module_id",
-			doc: &internal.AttestationDocument{
+			doc: &AttestationDocument{
 				Timestamp:   1234567890,
 				Certificate: []byte("cert"),
 				CABundle:    [][]byte{[]byte("ca")},
@@ -465,7 +464,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing timestamp",
-			doc: &internal.AttestationDocument{
+			doc: &AttestationDocument{
 				ModuleID:    "test-module",
 				Certificate: []byte("cert"),
 				CABundle:    [][]byte{[]byte("ca")},
@@ -475,7 +474,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing certificate",
-			doc: &internal.AttestationDocument{
+			doc: &AttestationDocument{
 				ModuleID:  "test-module",
 				Timestamp: 1234567890,
 				CABundle:  [][]byte{[]byte("ca")},
@@ -485,7 +484,7 @@ func TestAttestationDocumentValidate(t *testing.T) {
 		},
 		{
 			name: "missing cabundle",
-			doc: &internal.AttestationDocument{
+			doc: &AttestationDocument{
 				ModuleID:    "test-module",
 				Timestamp:   1234567890,
 				Certificate: []byte("cert"),
