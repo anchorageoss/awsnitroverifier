@@ -16,7 +16,9 @@ help: ## Display this help message
 build: ## Build the project
 	@echo "🔨 Building project..."
 	@mkdir -p bin
-	@go build -o bin/awsnitroverifier ./cmd/awsnitroverifier
+	@VERSION=$$(scripts/auto-version.sh); \
+	 COMMIT=$$(git rev-parse --short=12 HEAD); \
+	 go build -ldflags "-X github.com/anchorageoss/awsnitroverifier/version.Version=$$VERSION -X github.com/anchorageoss/awsnitroverifier/version.Commit=$$COMMIT" -o bin/awsnitroverifier ./cmd/awsnitroverifier
 	@echo "✅ Binary built: bin/awsnitroverifier"
 
 
@@ -163,13 +165,8 @@ ci: check ## Run CI pipeline locally
 	@echo "✅ CI pipeline completed successfully!"
 
 ##@ Release
-prepare-release: ## Prepare for release (run all checks, update docs)
-	@echo "🚀 Preparing release..."
-	@$(MAKE) clean
-	@$(MAKE) check
-	@$(MAKE) bench
-	@echo "📚 Please update CHANGELOG.md and README.md if needed"
-	@echo "✅ Release preparation completed!"
+prepare-release: check ## Run pre-release checks (releases themselves are automated via .github/workflows/release.yml)
+	@echo "✅ Local checks passed. Push to main to trigger an automated release."
 
 # Show Go version and environment info
 info: ## Show Go environment information

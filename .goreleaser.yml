@@ -1,0 +1,49 @@
+version: 2
+
+project_name: awsnitroverifier
+
+before:
+  hooks:
+    - go mod download
+    - go mod verify
+
+builds:
+  - main: ./cmd/awsnitroverifier
+    binary: awsnitroverifier
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      # .Version is the tag without the leading "v" (e.g. "0.56.0"); release binaries
+      # intentionally omit the "+branch-hash" metadata that local make builds include.
+      - -X github.com/anchorageoss/awsnitroverifier/version.Version={{.Version}}
+      - -X github.com/anchorageoss/awsnitroverifier/version.Commit={{ .Env.COMMIT_HASH }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums_{{ .Version }}.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: anchorageoss
+    name: awsnitroverifier
+  draft: false
+  prerelease: auto

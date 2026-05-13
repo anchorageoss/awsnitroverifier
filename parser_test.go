@@ -22,7 +22,7 @@ var awsNitroCertChainPEM []byte
 // ============================================================================
 
 // loadNitroAttestationPayload loads and extracts the attestation document from testdata
-// The test data is from a real AWS Nitro Enclave attestation (Turnkey service)
+// The test data is from a real-world AWS Nitro Enclave attestation.
 func loadNitroAttestationPayload(t *testing.T) []byte {
 	t.Helper()
 
