@@ -76,30 +76,56 @@ if [ "$RAW_BRANCH" = "main" ] || [ "$RAW_BRANCH" = "master" ]; then
   exit 0
 fi
 
-# Which main do we diff against?
+# Which main do we diff against? Prefer a remote pointing at this repo, then
+# any "origin", then a local "main"/"master" ref. If nothing usable exists,
+# fall back to a main-style output so local checkouts without remotes (e.g.
+# `git clone --depth=1 --branch=feat/foo`, archive extracts) still work.
 REMOTE=$(git remote -v | awk '/[[:space:]]\(fetch\)/ && /anchorageoss\/awsnitroverifier/ {print $1; exit}')
-if [ -z "$REMOTE" ]; then
+if [ -z "$REMOTE" ] && git remote get-url origin > /dev/null 2>&1; then
   REMOTE="origin"
 fi
 
-# Try main first, fall back to master
-DEFAULT_BRANCH="main"
-if ! git rev-parse --verify "$REMOTE/$DEFAULT_BRANCH" > /dev/null 2>&1; then
-  DEFAULT_BRANCH="master"
-fi
-
-MERGE_BASE=$(git merge-base "$REMOTE/$DEFAULT_BRANCH" HEAD)
-if [ "$MERGE_BASE" = "$(git rev-parse "$REMOTE/$DEFAULT_BRANCH")" ]; then
-  # Local remote-tracking ref may be stale — fetch to get the real merge base
-  echo "Fetching $REMOTE..." >&2
-  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-    git fetch "$REMOTE" >&2
-  else
-    git fetch "$REMOTE" > /dev/null 2>&1 || echo "Warning: fetch from $REMOTE failed, continuing with local ref" >&2
+DEFAULT_REF=""
+if [ -n "$REMOTE" ]; then
+  for candidate in "$REMOTE/main" "$REMOTE/master"; do
+    if git rev-parse --verify "$candidate" > /dev/null 2>&1; then
+      DEFAULT_REF="$candidate"
+      break
+    fi
+  done
+  if [ -z "$DEFAULT_REF" ]; then
+    # Remote-tracking ref is missing — best-effort fetch, then re-check.
+    echo "Fetching $REMOTE..." >&2
+    git fetch "$REMOTE" > /dev/null 2>&1 || echo "Warning: fetch from $REMOTE failed" >&2
+    for candidate in "$REMOTE/main" "$REMOTE/master"; do
+      if git rev-parse --verify "$candidate" > /dev/null 2>&1; then
+        DEFAULT_REF="$candidate"
+        break
+      fi
+    done
   fi
-  MERGE_BASE=$(git merge-base "$REMOTE/$DEFAULT_BRANCH" HEAD)
+fi
+if [ -z "$DEFAULT_REF" ]; then
+  # No remote-tracking ref — try local main/master.
+  for candidate in main master; do
+    if git rev-parse --verify "$candidate" > /dev/null 2>&1; then
+      DEFAULT_REF="$candidate"
+      break
+    fi
+  done
 fi
 
+if [ -z "$DEFAULT_REF" ]; then
+  # No reference branch anywhere — degrade to main-style output so make build
+  # still succeeds in archive extracts / shallow clones.
+  echo "Warning: no main/master ref available; falling back to commits-since-tag" >&2
+  COMMITS_SINCE_TAG=$(count_since_tag HEAD)
+  MINOR=$((MINOR_BASE + COMMITS_SINCE_TAG))
+  echo "$MAJOR.$MINOR.0+${BRANCH_META}$SHORT_HASH"
+  exit 0
+fi
+
+MERGE_BASE=$(git merge-base "$DEFAULT_REF" HEAD)
 COMMITS_TAG_TO_MERGE_BASE=$(count_since_tag "$MERGE_BASE")
 MINOR=$((MINOR_BASE + COMMITS_TAG_TO_MERGE_BASE))
 COMMITS_SINCE_MERGE_BASE=$(git rev-list --count "${MERGE_BASE}..HEAD")

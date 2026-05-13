@@ -59,20 +59,8 @@ func main() {
 				Action: runBasicVerification,
 			},
 			{
-				Name:  "examples",
-				Usage: "Print example invocations for the bundled testdata fixtures",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "env",
-						Usage: "Fixture environment: 'production' or 'preprod'",
-						Value: "production",
-					},
-					&cli.BoolFlag{
-						Name:    "verbose",
-						Aliases: []string{"v"},
-						Usage:   "Verbose output with detailed validation results",
-					},
-				},
+				Name:   "examples",
+				Usage:  "Print example invocations for the bundled testdata fixtures",
 				Action: runExamples,
 			},
 		},
@@ -135,36 +123,17 @@ func runBasicVerification(ctx context.Context, cmd *cli.Command) error {
 // The fixtures themselves are real-world AWS Nitro Enclave attestations
 // (sourced from Turnkey enclaves) bundled to keep the CLI useful out of the box.
 func runExamples(ctx context.Context, cmd *cli.Command) error {
-	env := cmd.String("env")
-	_ = cmd.Bool("verbose") // TODO: Use for verbose output
-
 	fmt.Println("🧪 Example invocations for bundled testdata fixtures")
 	fmt.Println("====================================================")
-
-	fmt.Println("Bundled fixtures in testdata/:")
-	fmt.Println("  - testdata/turnkey-prod.base64")
-	fmt.Println("  - testdata/turnkey-preprod.base64")
 	fmt.Println()
-
-	switch env {
-	case "production":
-		fmt.Println("Expected PCR values for testdata/turnkey-prod.base64:")
-		fmt.Println("  PCR[3]: b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b")
-		fmt.Println()
-		fmt.Println("Example command:")
-		fmt.Println("  go run ./cmd/awsnitroverifier verify -f ./testdata/turnkey-prod.base64 --pcrs 3:b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b")
-	case "preprod":
-		fmt.Println("Expected PCR values for testdata/turnkey-preprod.base64:")
-		fmt.Println("  PCR[3]: 864e9095a9947ab14698122370c13baf23183f4e9911953cf5b909a49db00f43f446707314674d9309974f3cc4b24728")
-		fmt.Println("  PCR[4]: 461a8588acc774ebfbde179cd1cd9f49e3c830eca6cd2ffed3aa773f187fb7e75f7bea0b12277a150b9a230011a55362")
-		fmt.Println()
-		fmt.Println("Example command:")
-		fmt.Println("  go run ./cmd/awsnitroverifier verify -f ./testdata/turnkey-preprod.base64 \\")
-		fmt.Println("    --pcrs 3:864e9095a9947ab14698122370c13baf23183f4e9911953cf5b909a49db00f43f446707314674d9309974f3cc4b24728,4:461a8588acc774ebfbde179cd1cd9f49e3c830eca6cd2ffed3aa773f187fb7e75f7bea0b12277a150b9a230011a55362")
-	default:
-		return fmt.Errorf("unknown environment: %s (must be 'production' or 'preprod')", env)
-	}
-
+	fmt.Println("Bundled fixture: testdata/turnkey-prod.base64")
+	fmt.Println("Expected PCR[3]: b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b")
+	fmt.Println()
+	fmt.Println("Example command:")
+	fmt.Println("  go run ./cmd/awsnitroverifier verify -f ./testdata/turnkey-prod.base64 \\")
+	fmt.Println("    --pcrs 3:b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b")
+	fmt.Println()
+	fmt.Println("To capture and verify a fresh attestation, see CONTRIBUTING.md.")
 	return nil
 }
 

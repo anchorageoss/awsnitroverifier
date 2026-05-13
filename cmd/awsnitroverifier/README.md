@@ -49,14 +49,13 @@ bin/awsnitroverifier verify \
 
 ### `examples`
 
-Prints ready-to-copy `verify` invocations for the bundled `testdata/` fixtures along with the PCR values expected for each.
+Prints a ready-to-copy `verify` invocation for the bundled `testdata/turnkey-prod.base64` fixture along with the PCR value expected for it.
 
 ```bash
-bin/awsnitroverifier examples --env production
-bin/awsnitroverifier examples --env preprod
+bin/awsnitroverifier examples
 ```
 
-The bundled fixtures (`testdata/turnkey-prod.base64`, `testdata/turnkey-preprod.base64`) are real-world AWS Nitro Enclave attestations captured from Turnkey signer enclaves. They're representative attestation documents — nothing about the verifier itself is Turnkey-specific.
+The bundled fixture is a real-world AWS Nitro Enclave attestation captured from a Turnkey signer enclave — representative of what production attestations look like. Nothing about the verifier itself is Turnkey-specific. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for how to capture additional fixtures of your own.
 
 ### `--version`
 
