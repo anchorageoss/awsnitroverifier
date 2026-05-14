@@ -45,6 +45,7 @@ bin/
 
 # Log files
 *.log
+test-output.txt
 
 # Local environment files
 .env
