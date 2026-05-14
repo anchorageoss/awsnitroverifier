@@ -10,14 +10,16 @@ The project includes embedded test attestation documents for testing and validat
 
 The test fixtures are embedded in the project using Go's `//go:embed` directive and located in `testdata/`:
 
-- **turnkey-prod.base64** - Production Turnkey attestation (for testing)
-- **aws-nitro-example.base64** - Generic AWS Nitro example
+- **aws_nitro_document.base64** / **aws_nitro_document.cbor** — generic AWS Nitro attestation from the Veracruz project
+- **aws_turnkey_valid_cert_chain.pem** — captured Nitro certificate chain (Turnkey-derived)
+- **turnkey-boot-attestation.base64** — boot attestation document (Turnkey-derived)
+- **turnkey-prod.base64** — production AWS Nitro attestation (Turnkey-derived; representative real-world fixture)
 
 ### Test Attestation Characteristics
 
 The embedded attestations are test fixtures with expired certificates. They should only be used for testing with `SkipTimestampCheck: true`.
 
-**Production Test Attestation:**
+**`turnkey-prod.base64` expected values** (used as a reference real-world AWS Nitro attestation):
 
 - PCR[3]: `b798abfdbd591d5e1b7db6485a6de9e65100f5796d9e3a2bd7c179989cd663338b567162974974fbcc45d03847e70d8b`
 - UserData: `8a5510ca253818acec5fb27b3ca114b4a260fb84f881838eb124aae9c968ad74` (32 bytes)
