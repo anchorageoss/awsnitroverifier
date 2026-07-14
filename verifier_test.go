@@ -87,12 +87,12 @@ func TestInvalidAttestationData(t *testing.T) {
 // TestOuterCOSEDecodeHardening verifies that decoding the outer COSE_Sign1 envelope
 // enforces the same CBOR resource-exhaustion limits (parser.go's hardenedDecMode) as
 // the inner attestation document decode, rather than falling back to fxamacker/cbor's
-// much looser un-configured defaults (131,072 max array elements/map pairs).
+// much looser unconfigured defaults (131,072 max array elements/map pairs).
 func TestOuterCOSEDecodeHardening(t *testing.T) {
 	verifier := NewVerifier(AWSNitroVerifierOptions{SkipTimestampCheck: true})
 
 	// 200 elements exceeds hardenedDecMode's MaxArrayElements (128) but is far below
-	// fxamacker/cbor's un-configured default (131,072), so this array would have decoded
+	// fxamacker/cbor's unconfigured default (131,072), so this array would have decoded
 	// successfully at the outer level before the outer decode was hardened.
 	oversizedArray := make([]int, 200)
 	for i := range oversizedArray {

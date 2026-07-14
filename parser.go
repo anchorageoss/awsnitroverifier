@@ -21,7 +21,9 @@ var hardenedDecMode = func() cbor.DecMode {
 		MaxMapPairs:      128,
 	}.DecMode()
 	if err != nil {
-		// DecOptions above are static and valid; a failure here indicates a build-time error.
+		// DecOptions above are static and always valid; a failure here would mean
+		// the fxamacker/cbor API itself changed incompatibly, so panicking here
+		// at package init is appropriate.
 		panic(fmt.Errorf("failed to create hardened CBOR decoder: %w", err))
 	}
 	return decMode
