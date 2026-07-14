@@ -9,6 +9,24 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+// hardenedDecMode is the CBOR decode mode used for every decode of attacker-controlled
+// input in this package, so no entry point is left relying on fxamacker/cbor's much
+// looser defaults (32 nested levels but 131,072 max array elements/map pairs):
+//   - MaxNestedLevels: 32 is sufficient for legitimate attestation documents
+//   - MaxArrayElements/MaxMapPairs: 128 covers typical PCR count and cert chain depth
+var hardenedDecMode = func() cbor.DecMode {
+	decMode, err := cbor.DecOptions{
+		MaxNestedLevels:  32,
+		MaxArrayElements: 128,
+		MaxMapPairs:      128,
+	}.DecMode()
+	if err != nil {
+		// DecOptions above are static and valid; a failure here indicates a build-time error.
+		panic(fmt.Errorf("failed to create hardened CBOR decoder: %w", err))
+	}
+	return decMode
+}()
+
 // parseCOSESign1 parses the COSE_Sign1 wrapper structure as defined in RFC 8152.
 // See https://datatracker.ietf.org/doc/html/rfc8152#section-4.2
 func parseCOSESign1(data []byte) (*coseSign1, error) {
@@ -17,7 +35,7 @@ func parseCOSESign1(data []byte) (*coseSign1, error) {
 	}
 
 	var coseArray []interface{}
-	if err := cbor.Unmarshal(data, &coseArray); err != nil {
+	if err := hardenedDecMode.Unmarshal(data, &coseArray); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal COSE_Sign1: %w", err)
 	}
 
@@ -59,19 +77,7 @@ func parseAttestationDocument(data []byte) (*AttestationDocument, error) {
 
 	var doc AttestationDocument
 
-	// Configure CBOR decoder with security limits to prevent resource exhaustion attacks:
-	// - MaxNestedLevels: 32 is sufficient for legitimate attestation documents
-	// - MaxArrayElements/MaxMapPairs: 128 covers typical PCR count and cert chain depth
-	decMode, err := cbor.DecOptions{
-		MaxNestedLevels:  32,
-		MaxArrayElements: 128,
-		MaxMapPairs:      128,
-	}.DecMode()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CBOR decoder: %w", err)
-	}
-
-	decoder := decMode.NewDecoder(bytes.NewReader(data))
+	decoder := hardenedDecMode.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("failed to decode CBOR: %w", err)
 	}
