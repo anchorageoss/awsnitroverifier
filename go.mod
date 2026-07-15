@@ -1,6 +1,6 @@
 module github.com/anchorageoss/awsnitroverifier
 
-go 1.25.0
+go 1.22
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.0
