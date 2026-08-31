@@ -8,8 +8,7 @@ import (
 )
 
 // Note: Attestation fixtures are embedded and managed in the root package test_helpers.go
-// using //go:embed. This allows the root package tests and the internal package tests
-// to share the same test data files.
+// using //go:embed.
 
 // Capturing fresh AWS Nitro attestation documents for use as test fixtures:
 //
@@ -44,9 +43,6 @@ import (
 //     --path /public/v1/query/get_attestation \
 //     --body '{"organizationId": "<yourOrgId>","enclaveType": "signer"}' \
 //     --organization=<yourOrgId> | jq -r '.attestationDocument' > turnkey-attestation.base64
-
-// TestAWSRootCertificateVerification - this test has been moved to internal package
-// since it tests internal implementation details
 
 // TestAWSNitroFixtures tests AWS Nitro attestation documents from Veracruz project
 // These documents are sourced from: https://github.com/veracruz-project/go-nitro-enclave-attestation-document/blob/main/test/aws_nitro_document.cbor
