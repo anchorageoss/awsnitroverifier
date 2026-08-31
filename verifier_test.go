@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,6 +82,39 @@ func TestInvalidAttestationData(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOuterCOSEDecodeHardening verifies that decoding the outer COSE_Sign1 envelope
+// enforces the same CBOR resource-exhaustion limits (parser.go's hardenedDecMode) as
+// the inner attestation document decode, rather than falling back to fxamacker/cbor's
+// much looser unconfigured defaults (131,072 max array elements/map pairs).
+func TestOuterCOSEDecodeHardening(t *testing.T) {
+	verifier := NewVerifier(AWSNitroVerifierOptions{SkipTimestampCheck: true})
+
+	// 200 elements exceeds hardenedDecMode's MaxArrayElements (128) but is far below
+	// fxamacker/cbor's unconfigured default (131,072), so this array would have decoded
+	// successfully at the outer level before the outer decode was hardened.
+	oversizedArray := make([]int, 200)
+	for i := range oversizedArray {
+		oversizedArray[i] = i
+	}
+
+	// A structurally valid 4-element COSE_Sign1 array, but with the oversized array
+	// smuggled into the unprotected-headers slot, which decodes as arbitrary CBOR.
+	outerCOSE := []interface{}{
+		[]byte("protected"),
+		oversizedArray,
+		[]byte("payload"),
+		[]byte("signature"),
+	}
+
+	data, err := cbor.Marshal(outerCOSE)
+	require.NoError(t, err)
+
+	result, err := verifier.Validate(data)
+	require.Error(t, err, "expected the outer COSE decode to reject an oversized array")
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "malformed attestation: failed to parse CBOR")
 }
 
 // TestValidationResultFields tests that the ValidationResult contains expected fields

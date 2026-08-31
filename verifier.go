@@ -93,7 +93,7 @@ func (v *verifier) validateBytes(attestationBytes []byte) (*ValidationResult, er
 
 	// Parse the outer COSE Sign1 structure - return error for malformed input
 	var coseSign1 interface{}
-	if err := cbor.Unmarshal(attestationBytes, &coseSign1); err != nil {
+	if err := hardenedDecMode.Unmarshal(attestationBytes, &coseSign1); err != nil {
 		return nil, fmt.Errorf("malformed attestation: failed to parse CBOR: %w", err)
 	}
 
@@ -198,7 +198,7 @@ func (v *verifier) verifySignature(attestationBytes []byte, doc *AttestationDocu
 
 	// Parse COSE Sign1 structure
 	var coseSign1 interface{}
-	if err := cbor.Unmarshal(attestationBytes, &coseSign1); err != nil {
+	if err := hardenedDecMode.Unmarshal(attestationBytes, &coseSign1); err != nil {
 		return fmt.Errorf("failed to unmarshal COSE Sign1: %w", err)
 	}
 
