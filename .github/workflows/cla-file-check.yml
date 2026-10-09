@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   check-cla-file:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     # Environment variables for easy configuration
     env:
